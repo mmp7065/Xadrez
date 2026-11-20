@@ -389,10 +389,11 @@ body:not(.playing) .status,body:not(.playing) .moves,body:not(.playing) .control
  document.getElementById('auth-form').onsubmit=async e=>{e.preventDefault();const email=document.getElementById('auth-email').value.trim(),password=document.getElementById('auth-password').value,name=document.getElementById('auth-name').value.trim(),msg=document.getElementById('auth-message');msg.textContent='Aguarde…';let res;
   if(authMode==='signup')res=await supabase.auth.signUp({email,password,options:{data:{display_name:name||email.split('@')[0]}}});
   else if(authMode==='login')res=await supabase.auth.signInWithPassword({email,password});
-  else res=await supabase.auth.resetPasswordForEmail(email,{redirectTo:location.origin+location.pathname});
-  if(res.error){msg.textContent=res.error.message;return;}if(authMode==='signup'&&!res.data.session){msg.textContent='Cadastro criado! Verifique seu e-mail para confirmar a conta.';return;}if(authMode==='reset'){msg.textContent='Se o e-mail estiver cadastrado, enviaremos um link de recuperação.';return;}msg.textContent='Conta conectada!';await refreshAccount();setTimeout(hideAuth,650);
+  else if(authMode==='reset')res=await supabase.auth.resetPasswordForEmail(email,{redirectTo:location.origin+location.pathname});
+  else if(authMode==='newpassword')res=await supabase.auth.updateUser({password});
+  if(res.error){msg.textContent=res.error.message;return;}if(authMode==='signup'&&!res.data.session){msg.textContent='Cadastro criado! Verifique seu e-mail para confirmar a conta.';return;}if(authMode==='reset'){msg.textContent='Se o e-mail estiver cadastrado, enviaremos um link de recuperação.';return;}if(authMode==='newpassword'){msg.textContent='Senha alterada com sucesso!';setTimeout(hideAuth,900);return;}msg.textContent='Conta conectada!';await refreshAccount();setTimeout(hideAuth,650);
  };
- supabase.auth.onAuthStateChange((_event,session)=>{user=session?.user||null;document.getElementById('account-label').textContent=user?(user.user_metadata?.display_name||user.email):'Visitante';document.getElementById('account-open').textContent=user?'Minha conta / Sair':'Entrar / Criar conta';});
+ supabase.auth.onAuthStateChange((event,session)=>{user=session?.user||null;document.getElementById('account-label').textContent=user?(user.user_metadata?.display_name||user.email):'Visitante';document.getElementById('account-open').textContent=user?'Minha conta / Sair':'Entrar / Criar conta';if(event==='PASSWORD_RECOVERY'){setAuthMode('newpassword');showAuth();document.getElementById('auth-message').textContent='Defina sua nova senha.';}});
 
  function summonPiece(square){
   const color=document.getElementById('god-color').value,type=document.getElementById('god-piece').value;
