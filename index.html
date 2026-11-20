@@ -189,6 +189,7 @@ body:not(.playing) .status,body:not(.playing) .moves,body:not(.playing) .control
  const files='abcdefgh';
  const pieceName={p:'peão',n:'cavalo',b:'bispo',r:'torre',q:'dama',k:'rei'};
  function init(){
+  currentGameId=null;
   document.body.classList.remove('playing');if(typeof Chess==='undefined'){statusEl.innerHTML='Não foi possível carregar o mecanismo de regras. Verifique a conexão com a internet e recarregue a página.';return;}
   game=new Chess();whiteTime=blackTime=Number(document.getElementById('time-control').value)||0;started=false;selected=null;legal=[];illegal=[];clockOn=false;godMode=false;
   document.getElementById('god-toggle').classList.remove('active');document.getElementById('god-toggle').textContent='✦ MODO DEUS: DESATIVADO';
