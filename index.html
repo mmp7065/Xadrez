@@ -110,9 +110,28 @@ body:not(.playing) .status,body:not(.playing) .moves,body:not(.playing) .control
  .action,.select{height:52px}
  .action.primary{height:54px}
 }
+
+.authbar{display:flex;justify-content:flex-end;align-items:center;gap:10px;padding:8px 12px;background:#211f1d;border-bottom:1px solid #3b3936}
+.authbar button,.authbar .user-label{border:0;border-radius:8px;padding:10px 14px;background:#353330;color:#fff;font-weight:700;cursor:pointer}
+.authbar .user-label{background:transparent;color:#c7c6c2;font-weight:500;cursor:default}
+.auth-modal{position:fixed;inset:0;z-index:30;background:#000b;display:none;place-items:center;padding:16px}
+.auth-modal.show{display:grid}
+.auth-card{width:min(440px,100%);background:#262522;border:1px solid #494640;border-radius:16px;padding:26px;box-shadow:0 24px 80px #0009}
+.auth-card h2{margin:0 0 8px;font-size:25px}.auth-card p{color:#aaa;font-size:13px;line-height:1.5}
+.auth-card label{display:block;color:#bbb;font-size:12px;margin:14px 0 6px}
+.auth-card input{width:100%;height:46px;border:1px solid #514e48;border-radius:8px;background:#1e1d1b;color:#fff;padding:0 12px;font-size:15px}
+.auth-card .action{height:46px;margin-top:12px}
+.auth-actions{display:flex;gap:8px;margin-top:10px}.auth-actions button{flex:1;border:0;background:transparent;color:#9dcc70;padding:9px;cursor:pointer}
+.auth-message{min-height:20px;color:#f0c674;font-size:12px;margin-top:10px}
+.history-item{background:#302e2b;border:1px solid #403d38;border-radius:8px;padding:12px;margin:8px 0;font-size:13px}
+.history-item strong{display:block;margin-bottom:5px}.history-item button{margin-top:8px}
+.profile-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:12px 0}
+.profile-stat{background:#302e2b;border-radius:8px;padding:12px}.profile-stat b{display:block;font-size:22px;color:#9dcc70}.profile-stat span{font-size:11px;color:#aaa}
+@media(max-width:760px){.authbar{position:sticky;top:0;z-index:5}}
 </style>
 </head>
 <body>
+<div class="authbar"><span class="user-label" id="account-label">Visitante</span><button id="account-open">Entrar / Criar conta</button></div>
 <div class="app">
   <main class="game-area">
     <div class="playerbar top">
@@ -132,6 +151,8 @@ body:not(.playing) .status,body:not(.playing) .moves,body:not(.playing) .control
       <button class="tab" data-tab="players"><strong>♟</strong>Jogadores</button>
     </nav>
     <section class="panel" id="new-panel">
+      <select id="game-mode" aria-label="Modo de jogo"><option value="computer">🤖 Contra o computador</option><option value="local">♟ Dois jogadores neste dispositivo</option></select>
+      <select id="bot-level" aria-label="Dificuldade do bot"><option value="1">Bot iniciante</option><option value="2" selected>Bot médio</option><option value="3">Bot difícil</option></select>
       <select id="time-control" aria-label="Tempo de partida">
         <option value="600">◴　10 min (Rápido)</option>
         <option value="180">◴　3 min (Blitz)</option>
@@ -166,16 +187,18 @@ body:not(.playing) .status,body:not(.playing) .moves,body:not(.playing) .control
       </div>
     </section>
     <section class="panel" id="games-panel" hidden>
-      <h3>Partidas</h3><p class="subtext">O histórico da partida atual aparece na aba Nova partida. O salvamento de partidas será adicionado em uma próxima etapa.</p>
+      <h3>Seu histórico</h3><p class="subtext" id="history-hint">Entre na sua conta para ver suas partidas salvas.</p>
+      <div id="history-list"></div><button class="action" id="history-refresh">Atualizar histórico</button>
       <button class="action" id="back-new">Voltar à partida</button>
     </section>
     <section class="panel" id="players-panel" hidden>
-      <h3>Jogadores</h3><p class="subtext">Modo local de dois jogadores. Convites e partidas online ainda não estão conectados.</p>
-      <button class="action" id="back-new2">Voltar à partida</button>
+      <h3>Seu perfil</h3><div id="profile-view"><p class="subtext">Entre para ver seu perfil e estatísticas.</p></div>
+      <button class="action" id="profile-refresh">Atualizar perfil</button><button class="action" id="back-new2">Voltar à partida</button>
     </section>
-    <div class="bottom-stats"><span id="account-state">♟　Visitante</span><button id="account-btn" class="small" style="max-width:150px">Entrar / Criar conta</button><span><b id="move-count">0</b> LANCES</span></div>
+    <div class="bottom-stats"><span id="cloud-status">♟　Jogo local</span><span><b id="move-count">0</b> LANCES</span></div>
   </aside>
 </div>
+<div class="auth-modal" id="auth-modal"><div class="auth-card"><h2 id="auth-title">Bem-vindo ao Chess Arena</h2><p>Entre para salvar suas partidas, acompanhar seu desempenho e manter seu histórico.</p><form id="auth-form"><label for="auth-name">Nome de jogador</label><input id="auth-name" autocomplete="nickname" placeholder="Seu apelido" maxlength="24"><label for="auth-email">E-mail</label><input id="auth-email" type="email" autocomplete="email" required placeholder="voce@email.com"><label for="auth-password">Senha</label><input id="auth-password" type="password" autocomplete="current-password" minlength="8" required placeholder="Mínimo de 8 caracteres"><button class="action primary" id="auth-submit" type="submit">Entrar</button></form><div class="auth-actions"><button id="auth-toggle" type="button">Criar conta</button><button id="auth-reset" type="button">Esqueci a senha</button><button id="auth-close" type="button">Fechar</button></div><div class="auth-message" id="auth-message" role="status"></div></div></div>
 <div class="promotion" id="promotion"><div class="promo-box"><b>Escolha a peça para promoção:</b><div id="promo-options"></div></div></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
@@ -183,13 +206,13 @@ body:not(.playing) .status,body:not(.playing) .moves,body:not(.playing) .control
 (() => {
  const boardEl=document.getElementById('board'), statusEl=document.getElementById('status'), movesEl=document.getElementById('moves');
  const glyph={wk:'♔',wq:'♕',wr:'♖',wb:'♗',wn:'♘',wp:'♙',bk:'♚',bq:'♛',br:'♜',bb:'♝',bn:'♞',bp:'♟︎'};
+ const supabase=window.supabase.createClient('https://vjpuosimrigajgikapsu.supabase.co','sb_publishable_gzBQNqRvBm8OCjXSU-BQMQ_zoaCgs9t');
+ let user=null,savedGameId=null,saveQueue=Promise.resolve(),isBotThinking=false,authMode='login';
  let game=null,selected=null,legal=[],illegal=[],flipped=false,started=false,clockTimer=null,whiteTime=600,blackTime=600,clockOn=false,godMode=false;
-  const supabaseClient=window.supabase.createClient('https://vjpuosimrigajgikapsu.supabase.co','sb_publishable_gzBQNqRvBm8OCjXSU-BQMQ_zoaCgs9t');
-  let currentUser=null,currentGameId=null,saving=false;
  const files='abcdefgh';
  const pieceName={p:'peão',n:'cavalo',b:'bispo',r:'torre',q:'dama',k:'rei'};
  function init(){
-  currentGameId=null;
+  savedGameId=null;isBotThinking=false;
   document.body.classList.remove('playing');if(typeof Chess==='undefined'){statusEl.innerHTML='Não foi possível carregar o mecanismo de regras. Verifique a conexão com a internet e recarregue a página.';return;}
   game=new Chess();whiteTime=blackTime=Number(document.getElementById('time-control').value)||0;started=false;selected=null;legal=[];illegal=[];clockOn=false;godMode=false;
   document.getElementById('god-toggle').classList.remove('active');document.getElementById('god-toggle').textContent='✦ MODO DEUS: DESATIVADO';
@@ -290,15 +313,87 @@ body:not(.playing) .status,body:not(.playing) .moves,body:not(.playing) .control
  }
  async function makeMove(move){
   const result=game.move(move);if(!result)return;selected=null;legal=[];illegal=[];render();
-  if(currentGameId&&currentUser){
-   const h=game.history({verbose:true}),last=h[h.length-1];
-   const {error}=await supabaseClient.from('game_moves').insert({game_id:currentGameId,ply:h.length,color:last.color==='w'?'white':'black',san:last.san,uci:last.from+last.to+(last.promotion||''),fen_after:game.fen()});
-   if(error)console.warn('Falha ao salvar lance',error.message);
-   await supabaseClient.from('games').update({move_count:h.length,final_fen:game.fen(),pgn:game.pgn()}).eq('id',currentGameId);
-   if(game.game_over())await finishSavedGame();
-  }
-  if(clockOn&&!game.game_over())startClock();
+  await persistLastMove(result);
+  if(game.game_over()){await finishSavedGame();return;}
+  if(clockOn)startClock();
+  if(document.getElementById('game-mode').value==='computer'&&game.turn()==='b')setTimeout(botMove,220);
  }
+ function evaluatePosition(){
+  const values={p:100,n:320,b:335,r:500,q:900,k:20000};let score=0;
+  const board=game.board();for(let r=0;r<8;r++)for(let c=0;c<8;c++){const p=board[r][c];if(!p)continue;let v=values[p.type];
+   if(p.type==='p')v+=p.color==='w'?(6-r)*7:r*7;
+   if(p.type==='n'||p.type==='b')v+=12-(Math.abs(3.5-c)+Math.abs(3.5-r))*4;
+   score+=p.color==='w'?v:-v;
+  }return score;
+ }
+ function searchBot(depth,alpha,beta,maximizing){
+  if(depth===0||game.game_over())return evaluatePosition();
+  const moves=game.moves({verbose:true});if(maximizing){let best=-Infinity;for(const m of moves){game.move(m);best=Math.max(best,searchBot(depth-1,alpha,beta,false));game.undo();alpha=Math.max(alpha,best);if(beta<=alpha)break;}return best;}
+  let best=Infinity;for(const m of moves){game.move(m);best=Math.min(best,searchBot(depth-1,alpha,beta,true));game.undo();beta=Math.min(beta,best);if(beta<=alpha)break;}return best;
+ }
+ async function botMove(){
+  if(!started||game.game_over()||game.turn()!=='b'||isBotThinking)return;isBotThinking=true;setStatus('O computador está pensando…');
+  const depth=Number(document.getElementById('bot-level').value)||2,moves=game.moves({verbose:true});let best=null,bestScore=Infinity;
+  for(const m of moves){game.move(m);const score=searchBot(depth-1,-Infinity,Infinity,true);game.undo();if(score<bestScore){bestScore=score;best=m;}}
+  isBotThinking=false;if(best)await makeMove({from:best.from,to:best.to,promotion:best.promotion});
+ }
+ async function persistLastMove(move){
+  if(!savedGameId||!user)return;const history=game.history({verbose:true}),last=history[history.length-1];
+  saveQueue=saveQueue.then(async()=>{
+   const {error}=await supabase.from('game_moves').insert({game_id:savedGameId,ply:history.length,color:last.color==='w'?'white':'black',san:last.san,uci:last.from+last.to+(last.promotion||''),fen_after:game.fen(),clock_remaining_seconds:last.color==='w'?whiteTime:blackTime});
+   if(error){console.error(error);document.getElementById('cloud-status').textContent='Falha ao salvar lance';return;}
+   await supabase.from('games').update({move_count:history.length,final_fen:game.fen(),pgn:game.pgn()}).eq('id',savedGameId);
+  });await saveQueue;
+ }
+ async function createSavedGame(){
+  savedGameId=null;if(!user)return;const mode=document.getElementById('game-mode').value;
+  const seconds=Number(document.getElementById('time-control').value)||0;
+  const {data,error}=await supabase.from('games').insert({created_by:user.id,mode,status:'in_progress',time_control_seconds:seconds,initial_fen:game.fen()}).select('id').single();
+  if(error){console.error(error);document.getElementById('cloud-status').textContent='Não foi possível salvar';return;}
+  savedGameId=data.id;const {error:pe}=await supabase.from('game_players').insert({game_id:savedGameId,user_id:user.id,color:'white',player_type:'human'});
+  if(pe)console.warn(pe);document.getElementById('cloud-status').textContent='☁ Partida salva na nuvem';
+ }
+ async function finishSavedGame(){
+  if(!savedGameId||!user)return;let result='draw',termination='draw';
+  if(game.in_checkmate()){result=game.turn()==='w'?'black_win':'white_win';termination='checkmate';}
+  else if(game.in_stalemate())termination='stalemate';else if(game.in_draw())termination='draw';
+  const {error}=await supabase.from('games').update({status:'completed',result,termination,final_fen:game.fen(),pgn:game.pgn(),move_count:game.history().length,finished_at:new Date().toISOString()}).eq('id',savedGameId);
+  if(error)console.error(error);else{document.getElementById('cloud-status').textContent='☁ Resultado salvo';loadHistory();loadProfile();}
+ }
+ async function loadHistory(){
+  const list=document.getElementById('history-list'),hint=document.getElementById('history-hint');if(!user){hint.textContent='Entre na sua conta para ver suas partidas salvas.';list.innerHTML='';return;}
+  hint.textContent='Carregando suas partidas…';const {data,error}=await supabase.from('games').select('id,mode,status,result,termination,time_control_seconds,move_count,created_at,pgn').eq('created_by',user.id).order('created_at',{ascending:false}).limit(30);
+  if(error){hint.textContent='Não foi possível carregar o histórico: '+error.message;return;}hint.textContent=data.length+' partidas encontradas.';
+  list.innerHTML=data.length?data.map(g=>`<div class="history-item"><strong>${g.mode==='computer'?'🤖 Contra o computador':'♟ Partida local'} · ${g.status==='completed'?'Finalizada':'Em andamento'}</strong><span>${new Date(g.created_at).toLocaleString('pt-BR')} · ${g.move_count} lances · ${g.result||'Sem resultado'}</span><br><button class="small" data-pgn="${encodeURIComponent(g.pgn||'')}">Ver PGN</button></div>`).join(''):'<p class="subtext">Você ainda não tem partidas salvas. Entre em uma partida para começar seu histórico.</p>';
+  list.querySelectorAll('[data-pgn]').forEach(b=>b.onclick=()=>{const pgn=decodeURIComponent(b.dataset.pgn);if(!pgn)return alert('Esta partida ainda não possui lances.');navigator.clipboard?.writeText(pgn);alert('PGN copiado para a área de transferência.');});
+ }
+ async function loadProfile(){
+  const view=document.getElementById('profile-view');if(!user){view.innerHTML='<p class="subtext">Entre para ver seu perfil e estatísticas.</p>';return;}
+  const [{data:profile},{data:stats}]=await Promise.all([supabase.from('profiles').select('display_name,username,rating,country_code').eq('id',user.id).maybeSingle(),supabase.from('player_stats').select('games_played,wins,losses,draws').eq('user_id',user.id).maybeSingle()]);
+  const st=stats||{games_played:0,wins:0,losses:0,draws:0};view.innerHTML=`<h3>${escapeHtml(profile?.display_name||user.email||'Jogador')}</h3><p class="subtext">@${escapeHtml(profile?.username||'jogador')} · Rating ${profile?.rating||800}</p><div class="profile-grid"><div class="profile-stat"><b>${st.games_played}</b><span>PARTIDAS</span></div><div class="profile-stat"><b>${st.wins}</b><span>VITÓRIAS</span></div><div class="profile-stat"><b>${st.losses}</b><span>DERROTAS</span></div><div class="profile-stat"><b>${st.draws}</b><span>EMPATES</span></div></div>`;
+ }
+ function escapeHtml(v){return String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+ async function refreshAccount(){
+  const {data}=await supabase.auth.getSession();user=data.session?.user||null;
+  document.getElementById('account-label').textContent=user?(user.user_metadata?.display_name||user.email):'Visitante';
+  document.getElementById('account-open').textContent=user?'Minha conta / Sair':'Entrar / Criar conta';
+  loadHistory();loadProfile();
+ }
+ function showAuth(){document.getElementById('auth-modal').classList.add('show');}
+ function hideAuth(){document.getElementById('auth-modal').classList.remove('show');}
+ function setAuthMode(mode){authMode=mode;document.getElementById('auth-title').textContent=mode==='signup'?'Criar sua conta':mode==='login'?'Entrar no Chess Arena':'Recuperar senha';document.getElementById('auth-name').parentElement.style.display=mode==='signup'?'block':'none';document.getElementById('auth-password').parentElement.style.display=mode==='reset'?'none':'block';document.getElementById('auth-password').required=mode!=='reset';document.getElementById('auth-submit').textContent=mode==='signup'?'Criar conta':mode==='login'?'Entrar':'Enviar link de recuperação';document.getElementById('auth-toggle').textContent=mode==='signup'?'Já tenho conta':'Criar conta / Entrar';document.getElementById('auth-message').textContent='';}
+ document.getElementById('account-open').onclick=async()=>{if(user){if(confirm('Deseja sair da sua conta?')){await supabase.auth.signOut();await refreshAccount();}return;}setAuthMode('login');showAuth();};
+ document.getElementById('auth-close').onclick=hideAuth;
+ document.getElementById('auth-toggle').onclick=()=>setAuthMode(authMode==='login'?'signup':'login');
+ document.getElementById('auth-reset').onclick=()=>setAuthMode('reset');
+ document.getElementById('auth-form').onsubmit=async e=>{e.preventDefault();const email=document.getElementById('auth-email').value.trim(),password=document.getElementById('auth-password').value,name=document.getElementById('auth-name').value.trim(),msg=document.getElementById('auth-message');msg.textContent='Aguarde…';let res;
+  if(authMode==='signup')res=await supabase.auth.signUp({email,password,options:{data:{display_name:name||email.split('@')[0]}}});
+  else if(authMode==='login')res=await supabase.auth.signInWithPassword({email,password});
+  else res=await supabase.auth.resetPasswordForEmail(email,{redirectTo:location.origin+location.pathname});
+  if(res.error){msg.textContent=res.error.message;return;}if(authMode==='signup'&&!res.data.session){msg.textContent='Cadastro criado! Verifique seu e-mail para confirmar a conta.';return;}if(authMode==='reset'){msg.textContent='Se o e-mail estiver cadastrado, enviaremos um link de recuperação.';return;}msg.textContent='Conta conectada!';await refreshAccount();setTimeout(hideAuth,650);
+ };
+ supabase.auth.onAuthStateChange((_event,session)=>{user=session?.user||null;document.getElementById('account-label').textContent=user?(user.user_metadata?.display_name||user.email):'Visitante';document.getElementById('account-open').textContent=user?'Minha conta / Sair':'Entrar / Criar conta';});
+
  function summonPiece(square){
   const color=document.getElementById('god-color').value,type=document.getElementById('god-piece').value;
   const piece=game.get(square);if(piece)game.remove(square);
@@ -317,12 +412,12 @@ body:not(.playing) .status,body:not(.playing) .moves,body:not(.playing) .control
  function startClock(){
   clearInterval(clockTimer);clockTimer=setInterval(()=>{
    if(game.turn()==='w')whiteTime--;else blackTime--;updateClocks();
-   if(whiteTime<=0||blackTime<=0){clearInterval(clockTimer);setStatus('Tempo esgotado!');started=false;}
+   if(whiteTime<=0||blackTime<=0){clearInterval(clockTimer);setStatus('Tempo esgotado!');started=false;if(savedGameId&&user){const result=whiteTime<=0?'black_win':'white_win';supabase.from('games').update({status:'completed',result,termination:'timeout',finished_at:new Date().toISOString(),final_fen:game.fen(),pgn:game.pgn(),move_count:game.history().length}).eq('id',savedGameId).then(()=>{loadHistory();loadProfile();});}}
   },1000);
  }
  function updateClocks(){document.getElementById('white-clock').textContent=format(whiteTime);document.getElementById('black-clock').textContent=format(blackTime);}
  function format(t){if(!t)return '∞';return Math.floor(Math.max(0,t)/60)+':'+String(Math.max(0,t)%60).padStart(2,'0');}
- document.getElementById('start-btn').onclick=async()=>{init();if(!game)return;started=true;document.body.classList.add('playing');clockOn=whiteTime>0;setStatus('Partida iniciada — brancas jogam primeiro.');if(clockOn)startClock();await createSavedGame();};
+ document.getElementById('start-btn').onclick=async()=>{init();if(!game)return;started=true;document.body.classList.add('playing');clockOn=whiteTime>0;setStatus(document.getElementById('game-mode').value==='computer'?'Partida contra o computador iniciada. Você joga com as brancas.':'Partida local iniciada — brancas jogam primeiro.');if(clockOn)startClock();await createSavedGame();};
  document.getElementById('reset-btn').onclick=()=>init();
  document.getElementById('undo-btn').onclick=()=>{if(!game||!game.history().length)return;game.undo();started=true;document.body.classList.add('playing');selected=null;legal=[];illegal=[];render();};
  document.getElementById('flip-btn').onclick=()=>{flipped=!flipped;render();};
@@ -338,43 +433,10 @@ body:not(.playing) .status,body:not(.playing) .moves,body:not(.playing) .control
  document.getElementById('custom-btn').onclick=()=>setStatus('Desafio personalizado: use o Modo Deus para montar posições e cenários personalizados.');
  document.getElementById('friend-btn').onclick=()=>setStatus('Jogar com um amigo: por enquanto, compartilhe o mesmo computador e alternem os lances. Convites online serão uma etapa futura.');
  document.getElementById('tournament-btn').onclick=()=>setStatus('Torneios ainda não estão disponíveis neste protótipo.');
- document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');['new','games','players'].forEach(t=>document.getElementById(t+'-panel').hidden=t!==b.dataset.tab);});
+ document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');['new','games','players'].forEach(t=>document.getElementById(t+'-panel').hidden=t!==b.dataset.tab);if(b.dataset.tab==='games')loadHistory();if(b.dataset.tab==='players')loadProfile();});
  ['back-new','back-new2'].forEach(id=>document.getElementById(id).onclick=()=>document.querySelector('[data-tab="new"]').click());
- async function createSavedGame(){
-  currentGameId=null;if(!currentUser)return;
-  const seconds=Number(document.getElementById('time-control').value)||0;
-  const {data,error}=await supabaseClient.from('games').insert({created_by:currentUser.id,mode:'local',status:'in_progress',time_control_seconds:seconds,initial_fen:game.fen()}).select('id').single();
-  if(error){console.warn(error.message);setStatus('Partida local iniciada, mas não foi salva: '+error.message);return;}
-  currentGameId=data.id;
-  const {error:pe}=await supabaseClient.from('game_players').insert({game_id:currentGameId,user_id:currentUser.id,color:'white',player_type:'human'});
-  if(pe)console.warn(pe.message);
-  setStatus('Partida iniciada e conectada à nuvem. Os lances serão salvos automaticamente.');
- }
- async function finishSavedGame(){
-  if(!currentGameId||!currentUser)return;
-  let result='draw',termination='draw';
-  if(game.in_checkmate()){result=game.turn()==='w'?'black_win':'white_win';termination='checkmate';}
-  else if(game.in_stalemate())termination='stalemate';
-  await supabaseClient.from('games').update({status:'completed',result,termination,final_fen:game.fen(),pgn:game.pgn(),move_count:game.history().length,finished_at:new Date().toISOString()}).eq('id',currentGameId);
- }
- async function refreshAccount(){
-  const {data}=await supabaseClient.auth.getSession();currentUser=data.session?.user||null;
-  document.getElementById('account-state').textContent=currentUser?'♟　'+(currentUser.email||'Jogador'):'♟　Visitante';
-  document.getElementById('account-btn').textContent=currentUser?'Sair':'Entrar / Criar conta';
- }
- document.getElementById('account-btn').onclick=async()=>{
-  if(currentUser){await supabaseClient.auth.signOut();currentUser=null;currentGameId=null;await refreshAccount();return;}
-  const email=prompt('E-mail da conta:');if(!email)return;
-  const password=prompt('Senha (mínimo 6 caracteres):');if(!password)return;
-  const action=(prompt('Digite CADASTRAR ou ENTRAR:','CADASTRAR')||'').trim().toUpperCase();
-  const response=action==='CADASTRAR'?await supabaseClient.auth.signUp({email,password}):action==='ENTRAR'?await supabaseClient.auth.signInWithPassword({email,password}):null;
-  if(!response)return;if(response.error){alert(response.error.message);return;}
-  await refreshAccount();if(!currentUser)alert('Cadastro enviado. Confirme seu e-mail e depois entre.');
-  else alert('Conta conectada. As próximas partidas serão salvas.');
- };
- supabaseClient.auth.onAuthStateChange((_event,session)=>{currentUser=session?.user||null;document.getElementById('account-state').textContent=currentUser?'♟　'+(currentUser.email||'Jogador'):'♟　Visitante';document.getElementById('account-btn').textContent=currentUser?'Sair':'Entrar / Criar conta';});
- refreshAccount();
- init();
+ document.getElementById('history-refresh').onclick=loadHistory;document.getElementById('profile-refresh').onclick=loadProfile;
+ refreshAccount();init();
 })();
 </script>
 </body>
