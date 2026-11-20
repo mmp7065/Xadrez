@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Xadrez — Chess Arena</title>
+<style>
+:root{
+  --page:#302e2b;--panel:#262522;--panel-top:#211f1d;--surface:#353330;
+  --light:#eeeed2;--dark:#779556;--green:#81b64b;--green-dark:#639b3e;
+  --white:#f7f7f7;--muted:#aaa9a6;--line:#3b3936;
+}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;background:var(--page);color:var(--white);font-family:Arial,Helvetica,sans-serif}
+body{min-height:100vh}
+button,select{font:inherit}
+button{ -webkit-tap-highlight-color:transparent }
+.app{
+  width:min(1600px,100%);min-height:100vh;margin:0 auto;padding:16px 16px 14px;
+  display:grid;grid-template-columns:minmax(0,1.62fr) minmax(380px,.92fr);gap:32px;
+}
+.game-area{min-width:0;display:flex;flex-direction:column;justify-content:center}
+.playerbar{height:50px;display:flex;align-items:center;gap:10px;flex:0 0 50px;font-size:14px;font-weight:700}
+.playerbar.top{margin-bottom:0}.playerbar.bottom{margin-top:8px}
+.avatar{width:40px;height:40px;flex:0 0 40px;border-radius:4px;background:#55534f;display:grid;place-items:center;font-size:29px;color:#252422;overflow:hidden}
+.player-meta{display:flex;align-items:center;gap:7px;min-width:0}
+.rating{font-weight:400;color:#c7c6c2;font-size:12px}
+.clock{margin-left:auto;min-width:140px;padding:6px 14px;background:#242321;border-radius:3px;color:#e6e6e6;font-size:25px;font-weight:700;text-align:center;font-variant-numeric:tabular-nums}
+.board-wrap{width:100%;max-width:min(100%,calc(100vh - 132px));aspect-ratio:1;margin:0 auto;position:relative;box-shadow:0 2px 8px #0003}
+.board{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));grid-template-rows:repeat(8,minmax(0,1fr));width:100%;height:100%;overflow:hidden;border-radius:3px}
+.square{border:0;padding:0;margin:0;min-width:0;min-height:0;position:relative;display:grid;place-items:center;cursor:pointer;user-select:none;touch-action:manipulation}
+.square.light{background:var(--light)}.square.dark{background:var(--dark)}
+.square:hover{filter:brightness(1.035)}
+.square.selected:after{content:"";position:absolute;inset:0;background:#f6f66991;pointer-events:none}
+.square.last:after{content:"";position:absolute;inset:0;background:#f6f6695c;pointer-events:none}
+.square .piece{z-index:1;position:relative;font-family:"Segoe UI Symbol","DejaVu Sans",Arial,sans-serif;font-size:clamp(34px,6.3vw,82px);line-height:1;transform:translateY(-1%);filter:drop-shadow(1px 2px 1px #0005)}
+.piece.white{color:#fff;text-shadow:-1px -1px 0 #555,1px -1px 0 #555,-1px 1px 0 #555,1px 1px 0 #555}
+.piece.black{color:#41403e;text-shadow:-1px -1px 0 #1b1a19,1px -1px 0 #1b1a19,-1px 1px 0 #1b1a19,1px 1px 0 #1b1a19}
+.coord{position:absolute;font-size:clamp(11px,1.35vw,17px);font-weight:700;z-index:3;pointer-events:none}
+.rank{left:6px;top:5px}.file{right:6px;bottom:3px}
+.light .coord{color:var(--dark)}.dark .coord{color:var(--light)}
+.dot{position:absolute;width:23%;height:23%;border-radius:50%;background:#24451f80;z-index:2;pointer-events:none}
+.capture-mark{position:absolute;inset:4%;border:5px solid #24451f80;border-radius:50%;z-index:2;pointer-events:none}
+.dot.illegal-dot{width:25%;height:25%;background:#d93025d9;box-shadow:0 0 0 2px #fff7}
+.capture-mark.illegal-capture{border-color:#d93025e6;box-shadow:inset 0 0 0 2px #fff6}
+.square.in-check{box-shadow:inset 0 0 0 7px #e53935;z-index:1}
+.square.in-check:before{content:"";position:absolute;inset:0;background:#e539354d;z-index:0;pointer-events:none}
+.god-tools{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;padding:10px;background:#302e2b;border-radius:8px}
+.god-tools label{font-size:11px;color:#bbb;display:flex;flex-direction:column;gap:5px}
+.god-tools select{height:36px;padding:0 8px;font-size:13px;border-radius:6px}
+.god-toggle{grid-column:1/-1;height:40px;border:1px solid #8d6bd1;background:#403451;color:#f1e9ff;border-radius:7px;font-weight:700;cursor:pointer}
+.god-toggle.active{background:#6c43a5;border-color:#b28be8;box-shadow:0 0 0 2px #b28be855}
+.god-hint{grid-column:1/-1;color:#c6b8dc;font-size:11px;line-height:1.4}
+.status.check{border-left:4px solid #e0a32e;background:#493a25}
+.status.mate{border-left:4px solid #e53935;background:#492b29;font-weight:700}
+.side{background:var(--panel);border-radius:7px;min-height:calc(100vh - 30px);display:flex;flex-direction:column;overflow:hidden}
+.tabs{height:57px;flex:0 0 57px;display:grid;grid-template-columns:repeat(3,1fr);background:var(--panel-top)}
+.tab{border:0;border-bottom:1px solid transparent;background:transparent;color:#b4b2ae;cursor:pointer;font-size:12px;padding:5px 7px 7px;transition:background .15s,color .15s}
+.tab strong{display:block;font-size:22px;line-height:25px;margin-bottom:1px;color:#999894;font-weight:500}
+.tab:hover{background:#2c2a27;color:#fff}
+.tab.active{background:#292724;color:#fff;border-bottom-color:#292724}
+.tab.active strong{color:#eee}
+.panel{padding:24px 34px 20px;display:flex;flex-direction:column;gap:9px}
+.panel[hidden]{display:none}
+select,.action{width:100%;height:57px;border:0;border-radius:11px;background:var(--surface);color:#f2f2f2;font-size:16px;font-weight:700;box-shadow:0 2px 5px #0004;cursor:pointer;transition:filter .15s,transform .1s}
+select{padding:0 18px;appearance:auto}
+.action{height:56px;margin-top:0}
+.action:hover,select:hover{filter:brightness(1.12)}
+.action:active{transform:translateY(1px)}
+.action.primary{height:56px;background:linear-gradient(#8bc34f,#659d3e);font-size:21px;text-shadow:0 1px 1px #45652b}
+.action.secondary{margin-top:15px}
+.subtext{color:var(--muted);font-size:12px;text-align:center;line-height:1.55}
+.status{background:#302e2b;border-radius:8px;padding:12px 14px;margin-top:9px;font-size:14px;line-height:1.45;min-height:44px}
+.moves{max-height:190px;overflow:auto;background:#302e2b;border-radius:7px;padding:10px;font-size:13px;line-height:1.9;color:#ddd}
+.move-row{display:grid;grid-template-columns:28px 1fr 1fr;gap:7px}
+.move-row span:first-child{color:#888}
+.controls{display:flex;gap:8px;margin-top:4px}
+.small{height:39px;flex:1;border:0;border-radius:7px;background:#45423e;color:white;font-weight:700;cursor:pointer}
+.small:hover{background:#55514c}
+body:not(.playing) .status,body:not(.playing) .moves,body:not(.playing) .controls{display:none}
+.bottom-stats{margin-top:auto;padding:15px 18px;color:#aaa;font-size:12px;display:flex;justify-content:space-between;align-items:center;gap:10px;border-top:1px solid #302e2b}
+.bottom-stats b{color:#ddd;font-size:13px}
+.promotion{position:fixed;inset:0;background:#0009;display:none;place-items:center;z-index:10}
+.promotion.show{display:grid}
+.promo-box{background:#292725;padding:22px;border-radius:10px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;justify-content:center;box-shadow:0 10px 40px #0008}
+.promo-box button{font-size:44px;width:65px;height:65px;border:0;border-radius:7px;background:#769656;cursor:pointer}
+@media(min-width:901px) and (min-height:750px){.board-wrap{max-width:min(100%,calc(100vh - 132px))}}
+@media(max-width:1000px){
+ .app{grid-template-columns:minmax(0,1.25fr) minmax(320px,.9fr);gap:18px;padding:12px}
+ .panel{padding:20px 18px}
+ .board-wrap{max-width:min(100%,calc(100vh - 120px))}
+}
+@media(max-width:760px){
+ .app{grid-template-columns:1fr;gap:12px;padding:10px}
+ .game-area{width:min(100%,calc(100vw - 20px));margin:auto}
+ .board-wrap{width:100%;max-width:min(100%,calc(100vh - 470px))}
+ .side{min-height:470px}
+ .panel{padding:18px}
+ .bottom-stats{margin-top:18px}
+}
+@media(max-width:480px){
+ .app{display:flex;flex-direction:column}
+ .game-area{width:100%}
+ .board-wrap{width:100%;max-width:100%}
+ .playerbar{height:40px;flex-basis:40px;font-size:13px}
+ .avatar{width:34px;height:34px;flex-basis:34px;font-size:25px}
+ .clock{font-size:20px;min-width:88px;padding:6px 9px}
+ .panel{padding:14px}
+ .side{min-height:440px}
+ .action,.select{height:52px}
+ .action.primary{height:54px}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <main class="game-area">
+    <div class="playerbar top">
+      <div class="avatar">♟</div><div class="player-meta"><span>Adversário</span><span class="rating" id="top-rating"></span></div>
+      <div class="clock" id="black-clock">10:00</div>
+    </div>
+    <div class="board-wrap"><div class="board" id="board" aria-label="Tabuleiro de xadrez"></div></div>
+    <div class="playerbar bottom">
+      <div class="avatar">♙</div><div class="player-meta"><span>mmp7065v2</span><span class="rating">(800) 🇧🇷</span></div>
+      <div class="clock" id="white-clock">10:00</div>
+    </div>
+  </main>
+  <aside class="side">
+    <nav class="tabs">
+      <button class="tab active" data-tab="new"><strong>✚</strong>Nova partida</button>
+      <button class="tab" data-tab="games"><strong>▦</strong>Partidas</button>
+      <button class="tab" data-tab="players"><strong>♟</strong>Jogadores</button>
+    </nav>
+    <section class="panel" id="new-panel">
+      <select id="time-control" aria-label="Tempo de partida">
+        <option value="600">◴　10 min (Rápido)</option>
+        <option value="180">◴　3 min (Blitz)</option>
+        <option value="300">◴　5 min (Blitz)</option>
+        <option value="900">◴　15 min (Rápido)</option>
+        <option value="0">∞　Sem relógio</option>
+      </select>
+      <button class="action primary" id="start-btn">Começar Partida</button>
+      <button class="action secondary" id="custom-btn">🗂️ Desafio personalizado</button>
+      <button class="action" id="friend-btn">🤝 Jogar com um amigo</button>
+      <button class="action" id="tournament-btn">🏅 Torneios</button>
+      <div class="status" id="status">Escolha o tempo e clique em <b>Começar Partida</b>. Modo local: duas pessoas podem jogar neste computador.</div>
+      <div class="moves" id="moves"><span style="color:#999">Os lances aparecerão aqui.</span></div>
+      <div class="controls">
+        <button class="small" id="undo-btn">↶ Desfazer</button>
+        <button class="small" id="flip-btn">⇅ Girar tabuleiro</button>
+        <button class="small" id="reset-btn">↻ Reiniciar</button>
+      </div>
+      <div class="god-tools">
+        <button class="god-toggle" id="god-toggle" type="button">✦ MODO DEUS: DESATIVADO</button>
+        <label>Cor da peça
+          <select id="god-color"><option value="w">Brancas</option><option value="b">Pretas</option></select>
+        </label>
+        <label>Peça para invocar
+          <select id="god-piece">
+            <option value="q">♕ Dama</option><option value="r">♖ Torre</option>
+            <option value="b">♗ Bispo</option><option value="n">♘ Cavalo</option>
+            <option value="p">♙ Peão</option><option value="k">♔ Rei</option>
+          </select>
+        </label>
+        <div class="god-hint" id="god-hint">🟢 Círculo verde: movimento permitido · 🔴 círculo vermelho: movimento ilegal (peça cravada ou rei exposto).<br>Ative o Modo Deus e clique em qualquer casa para colocar a peça escolhida. A peça que já estiver na casa será substituída.</div>
+      </div>
+    </section>
+    <section class="panel" id="games-panel" hidden>
+      <h3>Partidas</h3><p class="subtext">O histórico da partida atual aparece na aba Nova partida. O salvamento de partidas será adicionado em uma próxima etapa.</p>
+      <button class="action" id="back-new">Voltar à partida</button>
+    </section>
+    <section class="panel" id="players-panel" hidden>
+      <h3>Jogadores</h3><p class="subtext">Modo local de dois jogadores. Convites e partidas online ainda não estão conectados.</p>
+      <button class="action" id="back-new2">Voltar à partida</button>
+    </section>
+    <div class="bottom-stats"><span id="account-state">♟　Visitante</span><button id="account-btn" class="small" style="max-width:150px">Entrar / Criar conta</button><span><b id="move-count">0</b> LANCES</span></div>
+  </aside>
+</div>
+<div class="promotion" id="promotion"><div class="promo-box"><b>Escolha a peça para promoção:</b><div id="promo-options"></div></div></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+<script>
+(() => {
+ const boardEl=document.getElementById('board'), statusEl=document.getElementById('status'), movesEl=document.getElementById('moves');
+ const glyph={wk:'♔',wq:'♕',wr:'♖',wb:'♗',wn:'♘',wp:'♙',bk:'♚',bq:'♛',br:'♜',bb:'♝',bn:'♞',bp:'♟︎'};
+ let game=null,selected=null,legal=[],illegal=[],flipped=false,started=false,clockTimer=null,whiteTime=600,blackTime=600,clockOn=false,godMode=false;
+  const supabaseClient=window.supabase.createClient('https://vjpuosimrigajgikapsu.supabase.co','sb_publishable_gzBQNqRvBm8OCjXSU-BQMQ_zoaCgs9t');
+  let currentUser=null,currentGameId=null,saving=false;
+ const files='abcdefgh';
+ const pieceName={p:'peão',n:'cavalo',b:'bispo',r:'torre',q:'dama',k:'rei'};
+ function init(){
+  document.body.classList.remove('playing');if(typeof Chess==='undefined'){statusEl.innerHTML='Não foi possível carregar o mecanismo de regras. Verifique a conexão com a internet e recarregue a página.';return;}
+  game=new Chess();whiteTime=blackTime=Number(document.getElementById('time-control').value)||0;started=false;selected=null;legal=[];illegal=[];clockOn=false;godMode=false;
+  document.getElementById('god-toggle').classList.remove('active');document.getElementById('god-toggle').textContent='✦ MODO DEUS: DESATIVADO';
+  clearInterval(clockTimer);render();updateClocks();setStatus('Escolha o tempo e clique em “Começar Partida”. Modo local: duas pessoas podem jogar neste computador.');
+ }
+ function setStatus(message,type=''){
+  statusEl.textContent=message;statusEl.className='status'+(type?' '+type:'');
+ }
+ function kingSquare(color){
+  const rows=game.board();
+  for(let r=0;r<8;r++)for(let c=0;c<8;c++){const p=rows[r][c];if(p&&p.type==='k'&&p.color===color)return files[c]+(8-r);}
+  return null;
+ }
+ function pseudoTargets(from){
+  const p=game.get(from);if(!p)return [];
+  const f=files.indexOf(from[0]),r=Number(from[1])-1,dirs=[];
+  const add=(x,y)=>{if(x<0||x>7||y<0||y>7)return false;const to=files[x]+(y+1),target=game.get(to);if(target&&target.color===p.color)return false;if(target&&target.type==='k')return false;return to;};
+  const out=[];
+  const push=(x,y,slide=false)=>{while(true){const to=add(x,y);if(!to)break;out.push(to);if(game.get(to)||!slide)break;x+=slide?x:0;y+=slide?y:0;}};
+  if(p.type==='n'){
+   for(const [dx,dy] of [[1,2],[2,1],[2,-1],[1,-2],[-1,-2],[-2,-1],[-2,1],[-1,2]]){const to=add(f+dx,r+dy);if(to)out.push(to);}
+  } else if(p.type==='k'){
+   for(let dx=-1;dx<=1;dx++)for(let dy=-1;dy<=1;dy++)if(dx||dy){const to=add(f+dx,r+dy);if(to)out.push(to);}
+  } else if(p.type==='p'){
+   const dir=p.color==='w'?1:-1,one=add(f,r+dir);
+   if(one&&!game.get(one)){out.push(one);const startRank=p.color==='w'?1:6,two=add(f,r+2*dir);if(r===startRank&&two&&!game.get(two))out.push(two);}
+   for(const dx of [-1,1]){const to=add(f+dx,r+dir);if(to&&game.get(to))out.push(to);}
+   // En passant is a legal move in chess.js; include it if the engine lists it.
+   game.moves({square:from,verbose:true}).filter(m=>m.flags.includes('e')).forEach(m=>{if(!out.includes(m.to))out.push(m.to);});
+  } else {
+   const vectors=[];
+   if(p.type==='b'||p.type==='q')vectors.push([1,1],[1,-1],[-1,1],[-1,-1]);
+   if(p.type==='r'||p.type==='q')vectors.push([1,0],[-1,0],[0,1],[0,-1]);
+   for(const [dx,dy] of vectors){let x=f+dx,y=r+dy;while(x>=0&&x<8&&y>=0&&y<8){const to=add(x,y);if(!to)break;out.push(to);if(game.get(to))break;x+=dx;y+=dy;}}
+  }
+  return [...new Set(out)];
+ }
+ function refreshMoves(){
+  legal=selected?game.moves({square:selected,verbose:true}):[];
+  illegal=[];
+  if(selected){const legalTo=new Set(legal.map(m=>m.to));illegal=pseudoTargets(selected).filter(to=>!legalTo.has(to));}
+ }
+ function render(){
+  boardEl.innerHTML='';
+  const ranks=flipped?[1,2,3,4,5,6,7,8]:[8,7,6,5,4,3,2,1],cols=flipped?[...'hgfedcba']:[...'abcdefgh'];
+  const check=game.in_check(),checkedKing=check?kingSquare(game.turn()):null;
+  const history=game.history({verbose:true}),last=history[history.length-1];
+  ranks.forEach((rank,ri)=>cols.forEach((file,ci)=>{
+   const sq=file+rank,piece=game.get(sq),el=document.createElement('button');
+   el.className='square '+(((files.indexOf(file)+(8-rank))%2===0)?'light':'dark');
+   if(last&&(last.to===sq||last.from===sq))el.classList.add('last');
+   if(selected===sq)el.classList.add('selected');
+   if(check&&checkedKing===sq)el.classList.add('in-check');
+   if(ri===0){const c=document.createElement('span');c.className='coord rank';c.textContent=rank;el.append(c);}
+   if(ri===7){const c=document.createElement('span');c.className='coord file';c.textContent=file;el.append(c);}
+   if(piece){const span=document.createElement('span');span.className='piece '+(piece.color==='w'?'white':'black');span.textContent=glyph[piece.color+piece.type];el.append(span);}
+   if(legal.some(m=>m.to===sq)){const mark=document.createElement('span');mark.className=piece?'capture-mark':'dot';el.append(mark);}
+   else if(illegal.includes(sq)){const mark=document.createElement('span');mark.className=piece?'capture-mark illegal-capture':'dot illegal-dot';el.append(mark);}
+   el.addEventListener('click',()=>clickSquare(sq));boardEl.append(el);
+  }));
+  renderMoves();document.getElementById('move-count').textContent=game.history().length;
+  const over=game.game_over();
+  if(over){
+   if(game.in_checkmate()){setStatus('XEQUE-MATE! '+(game.turn()==='w'?'As pretas':'As brancas')+' venceram.','mate');}
+   else if(game.in_stalemate())setStatus('Empate por afogamento.','');
+   else if(game.in_draw())setStatus('Partida empatada.','');
+   else setStatus('Partida encerrada.','');
+  } else if(game.in_check())setStatus('XEQUE! O rei das '+(game.turn()==='w'?'brancas':'pretas')+' está ameaçado. Proteja o rei!','check');
+  else if(started)setStatus('Vez das '+(game.turn()==='w'?'brancas':'pretas')+'.');
+ }
+ function renderMoves(){
+  const h=game.history();if(!h.length){movesEl.innerHTML='<span style="color:#999">Os lances aparecerão aqui.</span>';return;}
+  let out='';for(let i=0;i<h.length;i+=2)out+=`<div class="move-row"><span>${i/2+1}.</span><span>${h[i]||''}</span><span>${h[i+1]||''}</span></div>`;movesEl.innerHTML=out;
+ }
+ function clickSquare(sq){
+  if(!started)return;
+  if(godMode){summonPiece(sq);return;}
+  if(game.game_over())return;
+  const piece=game.get(sq);
+  if(selected&&legal.some(m=>m.to===sq)){
+   const opts=legal.filter(m=>m.to===sq);
+   if(opts.some(m=>m.promotion)){showPromotion(opts);return;}
+   makeMove({from:selected,to:sq});return;
+  }
+  if(selected&&illegal.includes(sq)){
+   const moving=game.get(selected);
+   setStatus('Movimento bloqueado: '+pieceName[moving.type]+' cravado(a) ou este lance deixaria seu rei em xeque. Escolha uma casa segura.','check');
+   return;
+  }
+  if(piece&&piece.color===game.turn()){selected=sq;refreshMoves();}
+  else {selected=null;legal=[];illegal=[];}
+  render();
+ }
+ function showPromotion(opts){
+  const wrap=document.getElementById('promotion'),box=document.getElementById('promo-options');box.innerHTML='';
+  ['q','r','b','n'].forEach(t=>{const b=document.createElement('button');b.textContent=glyph[game.turn()+t];b.onclick=()=>{wrap.classList.remove('show');makeMove({from:selected,to:opts[0].to,promotion:t});};box.append(b);});
+  wrap.classList.add('show');
+ }
+ async function makeMove(move){
+  const result=game.move(move);if(!result)return;selected=null;legal=[];illegal=[];render();
+  if(currentGameId&&currentUser){
+   const h=game.history({verbose:true}),last=h[h.length-1];
+   const {error}=await supabaseClient.from('game_moves').insert({game_id:currentGameId,ply:h.length,color:last.color==='w'?'white':'black',san:last.san,uci:last.from+last.to+(last.promotion||''),fen_after:game.fen()});
+   if(error)console.warn('Falha ao salvar lance',error.message);
+   await supabaseClient.from('games').update({move_count:h.length,final_fen:game.fen(),pgn:game.pgn()}).eq('id',currentGameId);
+   if(game.game_over())await finishSavedGame();
+  }
+  if(clockOn&&!game.game_over())startClock();
+ }
+ function summonPiece(square){
+  const color=document.getElementById('god-color').value,type=document.getElementById('god-piece').value;
+  const piece=game.get(square);if(piece)game.remove(square);
+  if(type==='k'){
+   const oldKing=kingSquare(color);if(oldKing)game.remove(oldKing);
+  }
+  const ok=game.put({type,color},square);
+  if(!ok){
+   if(piece)game.put(piece,square);
+   setStatus('Não foi possível colocar essa peça nessa casa. Tente outra posição.','check');return;
+  }
+  selected=null;legal=[];illegal=[];started=true;document.body.classList.add('playing');
+  setStatus(glyph[color+type]+' '+pieceName[type].toUpperCase()+' invocado(a) em '+square.toUpperCase()+'. Modo Deus ativo.');
+  render();
+ }
+ function startClock(){
+  clearInterval(clockTimer);clockTimer=setInterval(()=>{
+   if(game.turn()==='w')whiteTime--;else blackTime--;updateClocks();
+   if(whiteTime<=0||blackTime<=0){clearInterval(clockTimer);setStatus('Tempo esgotado!');started=false;}
+  },1000);
+ }
+ function updateClocks(){document.getElementById('white-clock').textContent=format(whiteTime);document.getElementById('black-clock').textContent=format(blackTime);}
+ function format(t){if(!t)return '∞';return Math.floor(Math.max(0,t)/60)+':'+String(Math.max(0,t)%60).padStart(2,'0');}
+ document.getElementById('start-btn').onclick=async()=>{init();if(!game)return;started=true;document.body.classList.add('playing');clockOn=whiteTime>0;setStatus('Partida iniciada — brancas jogam primeiro.');if(clockOn)startClock();await createSavedGame();};
+ document.getElementById('reset-btn').onclick=()=>init();
+ document.getElementById('undo-btn').onclick=()=>{if(!game||!game.history().length)return;game.undo();started=true;document.body.classList.add('playing');selected=null;legal=[];illegal=[];render();};
+ document.getElementById('flip-btn').onclick=()=>{flipped=!flipped;render();};
+ document.getElementById('god-toggle').onclick=()=>{
+  godMode=!godMode;selected=null;legal=[];illegal=[];
+  const b=document.getElementById('god-toggle');b.classList.toggle('active',godMode);
+  b.textContent=godMode?'✦ MODO DEUS: ATIVADO':'✦ MODO DEUS: DESATIVADO';
+  document.getElementById('god-hint').textContent=godMode?'Clique em qualquer casa para invocar a peça escolhida. A peça existente será substituída.':'Ative o Modo Deus e clique em qualquer casa para colocar a peça escolhida. A peça que já estiver na casa será substituída.';
+  if(godMode){started=true;document.body.classList.add('playing');setStatus('Modo Deus ativado. Escolha cor e peça e clique em uma casa do tabuleiro.');}
+  else setStatus('Modo Deus desativado. As regras normais de xadrez voltaram.');
+  render();
+ };
+ document.getElementById('custom-btn').onclick=()=>setStatus('Desafio personalizado: use o Modo Deus para montar posições e cenários personalizados.');
+ document.getElementById('friend-btn').onclick=()=>setStatus('Jogar com um amigo: por enquanto, compartilhe o mesmo computador e alternem os lances. Convites online serão uma etapa futura.');
+ document.getElementById('tournament-btn').onclick=()=>setStatus('Torneios ainda não estão disponíveis neste protótipo.');
+ document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');['new','games','players'].forEach(t=>document.getElementById(t+'-panel').hidden=t!==b.dataset.tab);});
+ ['back-new','back-new2'].forEach(id=>document.getElementById(id).onclick=()=>document.querySelector('[data-tab="new"]').click());
+ async function createSavedGame(){
+  currentGameId=null;if(!currentUser)return;
+  const seconds=Number(document.getElementById('time-control').value)||0;
+  const {data,error}=await supabaseClient.from('games').insert({created_by:currentUser.id,mode:'local',status:'in_progress',time_control_seconds:seconds,initial_fen:game.fen()}).select('id').single();
+  if(error){console.warn(error.message);setStatus('Partida local iniciada, mas não foi salva: '+error.message);return;}
+  currentGameId=data.id;
+  const {error:pe}=await supabaseClient.from('game_players').insert({game_id:currentGameId,user_id:currentUser.id,color:'white',player_type:'human'});
+  if(pe)console.warn(pe.message);
+  setStatus('Partida iniciada e conectada à nuvem. Os lances serão salvos automaticamente.');
+ }
+ async function finishSavedGame(){
+  if(!currentGameId||!currentUser)return;
+  let result='draw',termination='draw';
+  if(game.in_checkmate()){result=game.turn()==='w'?'black_win':'white_win';termination='checkmate';}
+  else if(game.in_stalemate())termination='stalemate';
+  await supabaseClient.from('games').update({status:'completed',result,termination,final_fen:game.fen(),pgn:game.pgn(),move_count:game.history().length,finished_at:new Date().toISOString()}).eq('id',currentGameId);
+ }
+ async function refreshAccount(){
+  const {data}=await supabaseClient.auth.getSession();currentUser=data.session?.user||null;
+  document.getElementById('account-state').textContent=currentUser?'♟　'+(currentUser.email||'Jogador'):'♟　Visitante';
+  document.getElementById('account-btn').textContent=currentUser?'Sair':'Entrar / Criar conta';
+ }
+ document.getElementById('account-btn').onclick=async()=>{
+  if(currentUser){await supabaseClient.auth.signOut();currentUser=null;currentGameId=null;await refreshAccount();return;}
+  const email=prompt('E-mail da conta:');if(!email)return;
+  const password=prompt('Senha (mínimo 6 caracteres):');if(!password)return;
+  const action=(prompt('Digite CADASTRAR ou ENTRAR:','CADASTRAR')||'').trim().toUpperCase();
+  const response=action==='CADASTRAR'?await supabaseClient.auth.signUp({email,password}):action==='ENTRAR'?await supabaseClient.auth.signInWithPassword({email,password}):null;
+  if(!response)return;if(response.error){alert(response.error.message);return;}
+  await refreshAccount();if(!currentUser)alert('Cadastro enviado. Confirme seu e-mail e depois entre.');
+  else alert('Conta conectada. As próximas partidas serão salvas.');
+ };
+ supabaseClient.auth.onAuthStateChange((_event,session)=>{currentUser=session?.user||null;document.getElementById('account-state').textContent=currentUser?'♟　'+(currentUser.email||'Jogador'):'♟　Visitante';document.getElementById('account-btn').textContent=currentUser?'Sair':'Entrar / Criar conta';});
+ refreshAccount();
+ init();
+})();
+</script>
+</body>
+</html>
