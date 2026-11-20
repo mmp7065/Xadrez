@@ -49,7 +49,8 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const action = String(body.action || "");
     if (action === "create") {
-      const seconds = Math.max(0, Math.min(86400, Number(body.timeControlSeconds) || 600));
+      const rawSeconds = Number(body.timeControlSeconds);
+      const seconds = Number.isFinite(rawSeconds) ? Math.max(0, Math.min(86400, rawSeconds)) : 600;
       const preference = ["white", "black", "random"].includes(body.colorPreference) ? body.colorPreference : "random";
       let party = null, lastError = null;
       for (let attempt = 0; attempt < 5; attempt++) {
