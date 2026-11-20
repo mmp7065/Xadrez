@@ -1,0 +1,173 @@
+import { createClient } from "npm:@supabase/supabase-js@2.57.4";
+import { Chess } from "npm:chess.js@1.4.0";
+
+const cors = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
+const url = Deno.env.get("SUPABASE_URL")!;
+const secretKeys = JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS") ?? "{}");
+const serviceKey = secretKeys.default || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const admin = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
+
+function makeCode() {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const bytes = crypto.getRandomValues(new Uint8Array(6));
+  return [...bytes].map((b) => alphabet[b % alphabet.length]).join("");
+}
+async function requireUser(req: Request) {
+  const token = req.headers.get("Authorization")?.replace(/^Bearer\s+/i, "");
+  if (!token) throw new Error("Faça login para usar as festas.");
+  const { data, error } = await admin.auth.getUser(token);
+  if (error || !data.user) throw new Error("Sua sessão expirou. Entre novamente.");
+  return data.user;
+}
+async function partyState(partyId: string) {
+  const { data: party, error } = await admin.from("chess_parties").select("*").eq("id", partyId).single();
+  if (error || !party) throw new Error("Festa não encontrada.");
+  const { data: members } = await admin.from("chess_party_members").select("user_id,role,color_preference,assigned_color,joined_at,last_seen_at").eq("party_id", partyId).order("joined_at");
+  const ids = (members || []).map((m) => m.user_id);
+  const { data: profiles } = ids.length ? await admin.from("profiles").select("id,username,display_name,avatar_url,rating,country_code").in("id", ids) : { data: [] };
+  const roster = (members || []).map((m) => ({ ...m, profile: (profiles || []).find((p) => p.id === m.user_id) || null }));
+  let game = null, moves: unknown[] = [];
+  if (party.game_id) {
+    const { data } = await admin.from("games").select("id,status,result,termination,time_control_seconds,initial_fen,final_fen,pgn,move_count,created_at").eq("id", party.game_id).maybeSingle();
+    game = data;
+    const { data: rows } = await admin.from("game_moves").select("ply,color,san,uci,fen_after,clock_remaining_seconds,created_at").eq("game_id", party.game_id).order("ply");
+    moves = rows || [];
+  }
+  return { party, members: roster, game, moves };
+}
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
+  if (req.method !== "POST") return json({ error: "Método não permitido." }, 405);
+  try {
+    const user = await requireUser(req);
+    const body = await req.json();
+    const action = String(body.action || "");
+    if (action === "create") {
+      const seconds = Math.max(0, Math.min(86400, Number(body.timeControlSeconds) || 600));
+      const preference = ["white", "black", "random"].includes(body.colorPreference) ? body.colorPreference : "random";
+      let party = null, lastError = null;
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const { data, error } = await admin.from("chess_parties").insert({
+          code: makeCode(), host_user_id: user.id, time_control_seconds: seconds, color_preference: preference,
+        }).select("*").single();
+        if (!error) { party = data; break; }
+        lastError = error;
+      }
+      if (!party) throw new Error(lastError?.message || "Não foi possível criar o código da festa.");
+      const { error } = await admin.from("chess_party_members").insert({ party_id: party.id, user_id: user.id, role: "host", color_preference: preference });
+      if (error) throw error;
+      return json(await partyState(party.id));
+    }
+    if (action === "join") {
+      const code = String(body.code || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+      if (!/^[A-HJ-NP-Z2-9]{6}$/.test(code)) throw new Error("Digite um código de festa válido com 6 caracteres.");
+      const { data: party, error } = await admin.from("chess_parties").select("*").eq("code", code).maybeSingle();
+      if (error || !party || party.expires_at < new Date().toISOString()) throw new Error("Código inválido ou festa expirada.");
+      if (party.status !== "waiting") throw new Error("Esta festa já começou ou foi encerrada.");
+      const { data: existing } = await admin.from("chess_party_members").select("user_id").eq("party_id", party.id).eq("user_id", user.id).maybeSingle();
+      if (!existing) {
+        const { count } = await admin.from("chess_party_members").select("*", { count: "exact", head: true }).eq("party_id", party.id);
+        if ((count || 0) >= 2) throw new Error("Esta festa já está cheia.");
+        const preference = ["white", "black", "random"].includes(body.colorPreference) ? body.colorPreference : "random";
+        const { error: joinError } = await admin.from("chess_party_members").insert({ party_id: party.id, user_id: user.id, role: "member", color_preference: preference });
+        if (joinError) throw joinError;
+      }
+      return json(await partyState(party.id));
+    }
+    const partyId = String(body.partyId || "");
+    if (!partyId) throw new Error("Festa não informada.");
+    const { data: member } = await admin.from("chess_party_members").select("*").eq("party_id", partyId).eq("user_id", user.id).maybeSingle();
+    if (!member) throw new Error("Você não participa desta festa.");
+    if (action === "state") return json(await partyState(partyId));
+    if (action === "color") {
+      if (member.role === "host") throw new Error("A preferência do anfitrião é definida ao criar a festa.");
+      if ((await admin.from("chess_parties").select("status").eq("id", partyId).single()).data?.status !== "waiting") throw new Error("A partida já começou.");
+      const pref = ["white", "black", "random"].includes(body.colorPreference) ? body.colorPreference : "random";
+      const { error } = await admin.from("chess_party_members").update({ color_preference: pref }).eq("party_id", partyId).eq("user_id", user.id);
+      if (error) throw error;
+      return json(await partyState(partyId));
+    }
+    if (action === "start") {
+      const { data: party } = await admin.from("chess_parties").select("*").eq("id", partyId).single();
+      if (party.host_user_id !== user.id) throw new Error("Somente o anfitrião pode iniciar a partida.");
+      if (party.status !== "waiting") throw new Error("Esta festa não está aguardando uma partida.");
+      const { data: roster } = await admin.from("chess_party_members").select("*").eq("party_id", partyId);
+      if (!roster || roster.length !== 2) throw new Error("São necessários dois jogadores para começar.");
+      const host = roster.find((m) => m.role === "host")!;
+      const guest = roster.find((m) => m.role !== "host")!;
+      let hostColor: "white" | "black";
+      if (host.color_preference === "white") hostColor = "white";
+      else if (host.color_preference === "black") hostColor = "black";
+      else if (guest.color_preference === "white") hostColor = "black";
+      else if (guest.color_preference === "black") hostColor = "white";
+      else hostColor = crypto.getRandomValues(new Uint8Array(1))[0] % 2 ? "white" : "black";
+      const guestColor = hostColor === "white" ? "black" : "white";
+      const { data: game, error: gameError } = await admin.from("games").insert({
+        created_by: user.id, mode: "online", status: "in_progress",
+        time_control_seconds: party.time_control_seconds, party_id: partyId,
+        initial_fen: new Chess().fen(), final_fen: new Chess().fen(),
+      }).select("id").single();
+      if (gameError) throw gameError;
+      const { error: playersError } = await admin.from("game_players").insert([
+        { game_id: game.id, user_id: host.user_id, color: hostColor, player_type: "human" },
+        { game_id: game.id, user_id: guest.user_id, color: guestColor, player_type: "human" },
+      ]);
+      if (playersError) throw playersError;
+      await admin.from("chess_party_members").update({ assigned_color: hostColor }).eq("party_id", partyId).eq("user_id", host.user_id);
+      await admin.from("chess_party_members").update({ assigned_color: guestColor }).eq("party_id", partyId).eq("user_id", guest.user_id);
+      const { error: updateError } = await admin.from("chess_parties").update({ status: "in_game", game_id: game.id }).eq("id", partyId);
+      if (updateError) throw updateError;
+      return json(await partyState(partyId));
+    }
+    if (action === "move") {
+      const { data: party } = await admin.from("chess_parties").select("game_id,status").eq("id", partyId).single();
+      if (!party?.game_id || party.status !== "in_game") throw new Error("A partida não está ativa.");
+      const { data: gameRow } = await admin.from("games").select("id,initial_fen,final_fen,move_count,time_control_seconds").eq("id", party.game_id).single();
+      const { data: seat } = await admin.from("game_players").select("color").eq("game_id", party.game_id).eq("user_id", user.id).maybeSingle();
+      if (!seat) throw new Error("Você não está nesta partida.");
+      const expectedFen = gameRow.final_fen || gameRow.initial_fen;
+      const chess = new Chess(expectedFen);
+      const color = chess.turn() === "w" ? "white" : "black";
+      if (seat.color !== color) throw new Error("Ainda não é sua vez.");
+      const from = String(body.from || ""), to = String(body.to || "");
+      if (!/^[a-h][1-8]$/.test(from) || !/^[a-h][1-8]$/.test(to)) throw new Error("Movimento inválido.");
+      const result = chess.move({ from, to, promotion: body.promotion || "q" });
+      if (!result) throw new Error("Esse movimento não é permitido.");
+      const ply = (gameRow.move_count || 0) + 1;
+      const { error: commitError } = await admin.rpc("commit_party_move", {
+        p_party_id: partyId, p_game_id: party.game_id, p_user_id: user.id,
+        p_expected_fen: expectedFen, p_fen_after: chess.fen(), p_san: result.san,
+        p_uci: result.from + result.to + (result.promotion || ""), p_ply: ply,
+        p_color: color, p_clock_remaining_seconds: Math.max(0, Number(body.clockRemainingSeconds) || 0),
+      });
+      if (commitError) throw new Error(commitError.message.includes("POSITION_OUTDATED") ? "A posição mudou. Sincronizando a partida…" : commitError.message);
+      if (chess.isGameOver()) {
+        let resultCode = "draw", termination = "draw";
+        if (chess.isCheckmate()) { resultCode = color === "white" ? "white_win" : "black_win"; termination = "checkmate"; }
+        else if (chess.isStalemate()) termination = "stalemate";
+        else if (chess.isThreefoldRepetition()) termination = "threefold_repetition";
+        else if (chess.isInsufficientMaterial()) termination = "insufficient_material";
+        await admin.from("games").update({ status: "completed", result: resultCode, termination, finished_at: new Date().toISOString(), pgn: chess.pgn() }).eq("id", party.game_id);
+        await admin.from("chess_parties").update({ status: "finished" }).eq("id", partyId);
+      }
+      return json({ move: { from, to, san: result.san, fen: chess.fen(), ply, color }, state: await partyState(partyId) });
+    }
+    if (action === "leave") {
+      const { data: party } = await admin.from("chess_parties").select("status,host_user_id").eq("id", partyId).single();
+      if (party.status !== "waiting") throw new Error("A partida já começou. Use Desistir na tela da partida.");
+      await admin.from("chess_party_members").delete().eq("party_id", partyId).eq("user_id", user.id);
+      if (party.host_user_id === user.id) await admin.from("chess_parties").update({ status: "cancelled" }).eq("id", partyId);
+      return json({ ok: true });
+    }
+    throw new Error("Ação desconhecida.");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Erro inesperado.";
+    return json({ error: message }, 400);
+  }
+});
