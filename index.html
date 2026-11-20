@@ -373,7 +373,7 @@ body.in-game .app{display:grid}
   if(!started||game.game_over())return;if(godMode){summonPiece(sq);return;}
   const piece=game.get(sq),mode=document.getElementById('game-mode').value;
   if(mode==='online'&&(game.turn()==='w'?'white':'black')!==onlineColor){
-   if(premoveDraft){const from=premoveDraft,to=sq,candidates=pseudoTargets(from);if(candidates.includes(to)){premove={from,to,color:game.get(from)?.color};premoveDraft=null;selected=null;legal=[];illegal=[];document.getElementById('premove-hint').hidden=false;setStatus('Pré-move preparado. Será enviado quando chegar sua vez.');render();return;}premoveDraft=null;selected=null;legal=[];illegal=[];render();return;}
+   if(premoveDraft){const from=premoveDraft,to=sq,parts=game.fen().split(' ');parts[1]=onlineColor==='white'?'w':'b';const temp=new Chess(parts.join(' '));const candidates=temp.moves({square:from,verbose:true}).map(m=>m.to);if(candidates.includes(to)){premove={from,to,color:game.get(from)?.color};premoveDraft=null;selected=null;legal=[];illegal=[];document.getElementById('premove-hint').hidden=false;setStatus('Pré-move preparado. Será enviado quando chegar sua vez.');render();return;}premoveDraft=null;selected=null;legal=[];illegal=[];render();return;}
    if(piece&&piece.color===(onlineColor==='white'?'w':'b')){premoveDraft=sq;selected=sq;setStatus('Escolha o destino para preparar seu pré-move.');render();return;}
    setStatus('Aguarde a jogada do adversário.');return;
   }
