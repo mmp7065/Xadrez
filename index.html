@@ -288,7 +288,7 @@ body:not(.playing) .status,body:not(.playing) .moves,body:not(.playing) .control
   let out='';for(let i=0;i<h.length;i+=2)out+=`<div class="move-row"><span>${i/2+1}.</span><span>${h[i]||''}</span><span>${h[i+1]||''}</span></div>`;movesEl.innerHTML=out;
  }
  function clickSquare(sq){
-  if(!started)return;
+  if(!started)return;if(document.getElementById('game-mode').value==='computer'&&(game.turn()==='b'||isBotThinking))return;
   if(godMode){summonPiece(sq);return;}
   if(game.game_over())return;
   const piece=game.get(sq);
@@ -345,6 +345,7 @@ body:not(.playing) .status,body:not(.playing) .moves,body:not(.playing) .control
    await supabase.from('games').update({move_count:history.length,final_fen:game.fen(),pgn:game.pgn()}).eq('id',savedGameId);
   });await saveQueue;
  }
+ async function abandonSavedGame(){if(savedGameId&&user){await saveQueue;await supabase.from('games').update({status:'abandoned',result:'abandoned',termination:'restart',finished_at:new Date().toISOString(),final_fen:game.fen(),pgn:game.pgn(),move_count:game.history().length}).eq('id',savedGameId);loadHistory();}savedGameId=null;}
  async function createSavedGame(){
   savedGameId=null;if(!user)return;const mode=document.getElementById('game-mode').value;
   const seconds=Number(document.getElementById('time-control').value)||0;
@@ -372,7 +373,7 @@ body:not(.playing) .status,body:not(.playing) .moves,body:not(.playing) .control
   const {data,error}=await supabase.from('game_moves').select('san').eq('game_id',id).order('ply',{ascending:true});
   if(error){alert('Não foi possível abrir a partida: '+error.message);return;}
   const replay=new Chess(fen||undefined);for(const m of (data||[])){if(!replay.move(m.san)){alert('O histórico contém um lance inválido e não pode ser reproduzido.');return;}}
-  game=replay;started=false;selected=null;legal=[];illegal=[];godMode=false;document.body.classList.add('playing');clearInterval(clockTimer);render();setStatus('Replay carregado: '+(data?.length||0)+' lances. Use Desfazer para percorrer a partida para trás.');document.querySelector('[data-tab="new"]').click();
+  game=replay;savedGameId=null;started=false;selected=null;legal=[];illegal=[];godMode=false;document.body.classList.add('playing');clearInterval(clockTimer);render();setStatus('Replay carregado: '+(data?.length||0)+' lances. Use Desfazer para percorrer a partida para trás.');document.querySelector('[data-tab="new"]').click();
  }
  async function loadProfile(){
   const view=document.getElementById('profile-view');if(!user){view.innerHTML='<p class="subtext">Entre para ver seu perfil e estatísticas.</p>';return;}
@@ -425,8 +426,8 @@ body:not(.playing) .status,body:not(.playing) .moves,body:not(.playing) .control
  }
  function updateClocks(){document.getElementById('white-clock').textContent=format(whiteTime);document.getElementById('black-clock').textContent=format(blackTime);}
  function format(t){if(!t)return '∞';return Math.floor(Math.max(0,t)/60)+':'+String(Math.max(0,t)%60).padStart(2,'0');}
- document.getElementById('start-btn').onclick=async()=>{init();if(!game)return;started=true;document.body.classList.add('playing');clockOn=whiteTime>0;setStatus(document.getElementById('game-mode').value==='computer'?'Partida contra o computador iniciada. Você joga com as brancas.':'Partida local iniciada — brancas jogam primeiro.');if(clockOn)startClock();await createSavedGame();};
- document.getElementById('reset-btn').onclick=()=>init();
+ document.getElementById('start-btn').onclick=async()=>{await abandonSavedGame();init();if(!game)return;started=true;document.body.classList.add('playing');clockOn=whiteTime>0;setStatus(document.getElementById('game-mode').value==='computer'?'Partida contra o computador iniciada. Você joga com as brancas.':'Partida local iniciada — brancas jogam primeiro.');if(clockOn)startClock();await createSavedGame();};
+ document.getElementById('reset-btn').onclick=async()=>{await abandonSavedGame();init();};
  document.getElementById('undo-btn').onclick=()=>{if(!game||!game.history().length)return;game.undo();started=true;document.body.classList.add('playing');selected=null;legal=[];illegal=[];render();};
  document.getElementById('flip-btn').onclick=()=>{flipped=!flipped;render();};
  document.getElementById('god-toggle').onclick=()=>{
