@@ -360,7 +360,7 @@ body.in-game .app{display:grid}
   const piece=game.get(sq),mode=document.getElementById('game-mode').value;
   const isMyTurn=mode==='computer'?game.turn()==='w':true;
   if(mode==='computer'&&(game.turn()==='b'||isBotThinking))return;
-  if(mode==='local'&&game.turn()!==(piece?.color||game.turn())){
+  if(mode==='local'&&(premoveDraft||(piece&&piece.color!==game.turn()))){
    if(premoveDraft){const from=premoveDraft,to=sq,candidates=pseudoTargets(from);if(candidates.includes(to)){premove={from,to,color:game.get(from)?.color};premoveDraft=null;selected=null;legal=[];illegal=[];document.getElementById('premove-hint').hidden=false;setStatus('Pré-move preparado. Ele será executado automaticamente se continuar legal.');render();return;}premoveDraft=null;selected=null;legal=[];illegal=[];render();return;}
    if(piece&&piece.color!==game.turn()){premoveDraft=sq;selected=sq;setStatus('Escolha a casa de destino para preparar o pré-move.');render();return;}
    selected=null;legal=[];illegal=[];render();return;
