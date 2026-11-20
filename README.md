@@ -26,3 +26,27 @@ Multiplayer em tempo real, matchmaking, convites validados, ELO calculado no ser
 
 ## Publicação
 Qualquer push para main aciona o workflow de GitHub Pages.
+
+
+## Festas privadas e partidas online
+- Criação de salas privadas com código curto de 6 caracteres.
+- Entrada por código ou link compartilhável.
+- Lobby com anfitrião, convidado, preferências de cor e presença em tempo real.
+- Início da partida pelo anfitrião quando há dois jogadores.
+- Partidas online sincronizadas via Supabase Realtime Broadcast/Presence.
+- Movimentos validados no servidor com chess.js e gravados em `game_moves`.
+- O banco aplica controle otimista de posição (FEN esperado) para impedir dois lances concorrentes na mesma posição.
+- Edge Function `chess-party` autentica o JWT do usuário e executa as ações privilegiadas no servidor.
+
+### Recursos de infraestrutura
+- Tabelas `chess_parties` e `chess_party_members`, com RLS.
+- Políticas de autorização para canais privados Realtime por membro da festa.
+- Função SQL `commit_party_move` com execução reservada ao papel `service_role`.
+- Trigger de banco que limita cada festa a dois participantes, inclusive sob tentativas simultâneas de entrada.
+
+### Como testar
+1. Entre no Chess Arena em duas contas diferentes (ou dois navegadores).
+2. No painel, abra **Festas** e crie uma festa.
+3. Copie o código de seis caracteres e envie ao outro jogador.
+4. Na segunda conta, abra **Festas**, digite o código e entre.
+5. O anfitrião inicia; cada jogador move somente as peças da sua cor.
