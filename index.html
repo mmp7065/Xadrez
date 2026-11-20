@@ -233,7 +233,7 @@ body.in-game .app{display:grid}
       <button class="tab" data-tab="players"><strong>♟</strong>Jogadores</button>
     </nav>
     <section class="panel" id="new-panel">
-      <select id="game-mode" aria-label="Modo de jogo"><option value="computer">🤖 Contra o computador</option><option value="local">♟ Dois jogadores neste dispositivo</option></select>
+      <select id="game-mode" aria-label="Modo de jogo"><option value="computer">🤖 Contra o computador</option><option value="local">♟ Dois jogadores neste dispositivo</option><option value="online">♟ Festa online</option></select>
       <select id="bot-level" aria-label="Dificuldade do bot"><option value="1">Bot iniciante</option><option value="2" selected>Bot médio</option><option value="3">Bot difícil</option></select>
       <select id="time-control" aria-label="Tempo de partida">
         <option value="600">◴　10 min (Rápido)</option>
@@ -467,6 +467,7 @@ body.in-game .app{display:grid}
   document.getElementById('account-label').textContent=user?(user.user_metadata?.display_name||user.email):'Visitante';
   document.getElementById('account-open').textContent=user?'Minha conta / Sair':'Entrar / Criar conta';
   loadHistory();loadProfile();
+  const inviteCode=new URLSearchParams(location.search).get('party');if(user&&inviteCode&&!window.__partyInviteHandled){window.__partyInviteHandled=true;document.getElementById('party-join-code').value=inviteCode.toUpperCase();showPlayerView('parties');setTimeout(joinParty,250);}
  }
  function showAuth(){document.getElementById('auth-modal').classList.add('show');}
  function hideAuth(){document.getElementById('auth-modal').classList.remove('show');}
