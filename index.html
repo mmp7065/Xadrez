@@ -790,14 +790,15 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
   const task=engineEvalQueue.then(async()=>{
    await initReviewEngine();
    return await new Promise((resolve,reject)=>{
-    let score=0,mate=null,done=false,timer;
+    let score=0,mate=null,bestmove=null,done=false,timer;
     const listener=e=>{
-     const line=String(e.data||''),cp=line.match(/score cp (-?\d+)/),mt=line.match(/score mate (-?\d+)/);
+     const line=String(e.data||''),cp=line.match(/score cp (-?\d+)/),mt=line.match(/score mate (-?\d+)/),bm=line.match(/^bestmove (\\S+)/);
      if(cp)score=Number(cp[1]);if(mt)mate=Number(mt[1]);
+     if(bm)bestmove=bm[1];
      if(line.startsWith('bestmove')){
       done=true;clearTimeout(timer);reviewWorker.removeEventListener('message',listener);
       const raw=mate===null?score:(mate>0?100000:-100000);
-      resolve({cp:fen.split(' ')[1]==='w'?raw:-raw,mate});
+      resolve({cp:fen.split(' ')[1]==='w'?raw:-raw,mate,bestmove});
      }
     };
     reviewWorker.addEventListener('message',listener);
@@ -835,12 +836,14 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
   const before=await stockfishEval(beforeFen);const after=await stockfishEval(afterFen);
   const expected=cp=>1/(1+Math.pow(10,-Math.max(-4000,Math.min(4000,cp))/400));
   const loss=Math.max(0,expected(before.cp*sign)-expected(after.cp*sign));
-  const legalCount=new Chess(beforeFen).moves().length;
-  const isCapture=!!move.captured,wasSacrifice=isCapture&&move.piece!=='p'&&loss<=.025&&Math.abs(before.cp)<550;
+  const beforePosition=new Chess(beforeFen),afterPosition=new Chess(afterFen),legalMoves=beforePosition.moves({verbose:true}),legalCount=legalMoves.length;
+  const chosenUci=move.from+move.to+(move.promotion||''),engineBest=before.bestmove===chosenUci;
+  const attackedAfter=afterPosition.moves({verbose:true}).some(candidate=>candidate.to===move.to&&candidate.captured===move.piece);
+  const valuableSacrifice=move.piece!=='p'&&({n:3,b:3,r:5,q:9}[move.piece]||0)>=3&&attackedAfter&&loss<=.025&&Math.abs(before.cp*sign)<800;
   let cls='blunder';
-  if(wasSacrifice)cls='brilliant';
+  if(valuableSacrifice)cls='brilliant';
+  else if(engineBest||loss<=.005)cls='best';
   else if(legalCount<=2&&loss<=.02)cls='great';
-  else if(loss<=.005)cls='best';
   else if(loss<=.02)cls='excellent';
   else if(loss<=.05)cls='good';
   else if((move.san.includes('+')||isCapture)&&loss<=.07)cls='interesting';
