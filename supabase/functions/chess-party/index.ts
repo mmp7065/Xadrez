@@ -112,7 +112,9 @@ Deno.serve(async (req) => {
       const pref = ["white", "black", "random"].includes(body.colorPreference) ? body.colorPreference : "random";
       const { error } = await admin.from("chess_party_members").update({ color_preference: pref }).eq("party_id", partyId).eq("user_id", user.id);
       if (error) throw error;
-      return json(await partyState(partyId));
+      const state = await partyState(partyId);
+      await notifyParty(partyId, "settings_updated");
+      return json(state);
     }
     if (action === "start") {
       const { data: party } = await admin.from("chess_parties").select("*").eq("id", partyId).single();
@@ -168,7 +170,6 @@ Deno.serve(async (req) => {
         p_color: color, p_clock_remaining_seconds: Math.max(0, Number(body.clockRemainingSeconds) || 0),
       });
       if (commitError) throw new Error(commitError.message.includes("POSITION_OUTDATED") ? "A posição mudou. Sincronizando a partida…" : commitError.message);
-      await notifyParty(partyId, "move_committed", { gameId: party.game_id });
       if (chess.isGameOver()) {
         let resultCode = "draw", termination = "draw";
         if (chess.isCheckmate()) { resultCode = color === "white" ? "white_win" : "black_win"; termination = "checkmate"; }
@@ -178,6 +179,7 @@ Deno.serve(async (req) => {
         await admin.from("games").update({ status: "completed", result: resultCode, termination, finished_at: new Date().toISOString(), pgn: chess.pgn() }).eq("id", party.game_id);
         await admin.from("chess_parties").update({ status: "finished" }).eq("id", partyId);
       }
+      await notifyParty(partyId, "move_committed", { gameId: party.game_id });
       const state = await partyState(partyId);
       return json({ move: { from, to, san: result.san, fen: chess.fen(), ply, color }, state });
     }
