@@ -251,6 +251,33 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
 #rematch-notice-modal .rematch-notice-actions{margin-top:12px}
 #rematch-notice-modal .rematch-notice-actions button{min-height:42px}
 @media(max-width:650px){#rematch-notice-modal{inset:8px 8px auto auto;width:min(350px,calc(100vw - 16px))}.board-wrap{padding:4px;border-radius:9px}.playerbar{padding:7px 9px}}
+
+/* Restore move-grade corner circles: keep them above pieces and board highlights */
+.square{overflow:visible!important;position:relative!important}
+.square .piece-grade{
+ position:absolute!important;top:3px!important;right:3px!important;left:auto!important;bottom:auto!important;
+ display:flex!important;align-items:center!important;justify-content:center!important;
+ width:clamp(20px,2.7vw,30px)!important;height:clamp(20px,2.7vw,30px)!important;
+ min-width:20px!important;min-height:20px!important;border-radius:50%!important;
+ opacity:1!important;visibility:visible!important;z-index:30!important;
+ border:2px solid rgba(255,255,255,.88)!important;
+ color:#fff!important;font-size:clamp(11px,1.45vw,17px)!important;font-weight:900!important;
+ line-height:1!important;text-align:center!important;text-shadow:0 1px 2px #0009!important;
+ box-shadow:0 2px 6px #0008!important;pointer-events:none!important;
+}
+.square .piece-grade.grade-mistake,
+.square .piece-grade.grade-blunder,
+.square .piece-grade.grade-miss{background:#e53935!important;color:#fff!important}
+.square .piece-grade.grade-inaccuracy{background:#e5ad22!important;color:#242018!important}
+.square .piece-grade.grade-brilliant{background:#08b9a8!important}
+.square .piece-grade.grade-great{background:#a0c94b!important}
+.square .piece-grade.grade-best,
+.square .piece-grade.grade-excellent{background:#8fbd42!important}
+.square .piece-grade.grade-good{background:#45a94c!important}
+.square .piece-grade.grade-interesting{background:#8a83c4!important}
+.square .piece-grade.grade-book{background:#a77c57!important}
+.square .piece-grade.grade-mate{background:#282828!important}
+
 </style>
 </head>
 <body>
