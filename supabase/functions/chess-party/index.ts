@@ -25,6 +25,11 @@ async function requireUser(req: Request) {
   if (error || !data.user) throw new Error("Sua sessão expirou. Entre novamente.");
   return data.user;
 }
+async function notifyParty(partyId: string, event: string, extra: Record<string, unknown> = {}) {
+  const channel = admin.channel("party:" + partyId, { config: { private: true } });
+  try { await channel.send({ type: "broadcast", event: "party_event", payload: { event, ...extra, at: Date.now() } }); }
+  finally { await admin.removeChannel(channel); }
+}
 async function partyState(partyId: string) {
   const { data: party, error } = await admin.from("chess_parties").select("*").eq("id", partyId).single();
   if (error || !party) throw new Error("Festa não encontrada.");
@@ -86,6 +91,21 @@ Deno.serve(async (req) => {
     const { data: member } = await admin.from("chess_party_members").select("*").eq("party_id", partyId).eq("user_id", user.id).maybeSingle();
     if (!member) throw new Error("Você não participa desta festa.");
     if (action === "state") return json(await partyState(partyId));
+    if (action === "configure") {
+      const { data: party } = await admin.from("chess_parties").select("*").eq("id", partyId).single();
+      if (party.host_user_id !== user.id) throw new Error("Somente o anfitrião pode alterar as configurações da festa.");
+      if (party.status !== "waiting") throw new Error("As configurações só podem ser alteradas antes de começar a partida.");
+      const rawSeconds = Number(body.timeControlSeconds);
+      if (!Number.isFinite(rawSeconds) || rawSeconds < 0 || rawSeconds > 86400) throw new Error("Tempo de partida inválido.");
+      const preference = ["white", "black", "random"].includes(body.colorPreference) ? body.colorPreference : "random";
+      const { error: updateError } = await admin.from("chess_parties").update({ time_control_seconds: Math.floor(rawSeconds), color_preference: preference }).eq("id", partyId);
+      if (updateError) throw updateError;
+      const { error: memberError } = await admin.from("chess_party_members").update({ color_preference: preference }).eq("party_id", partyId).eq("user_id", user.id);
+      if (memberError) throw memberError;
+      const state = await partyState(partyId);
+      await notifyParty(partyId, "settings_updated");
+      return json(state);
+    }
     if (action === "color") {
       if (member.role === "host") throw new Error("A preferência do anfitrião é definida ao criar a festa.");
       if ((await admin.from("chess_parties").select("status").eq("id", partyId).single()).data?.status !== "waiting") throw new Error("A partida já começou.");
@@ -148,6 +168,7 @@ Deno.serve(async (req) => {
         p_color: color, p_clock_remaining_seconds: Math.max(0, Number(body.clockRemainingSeconds) || 0),
       });
       if (commitError) throw new Error(commitError.message.includes("POSITION_OUTDATED") ? "A posição mudou. Sincronizando a partida…" : commitError.message);
+      await notifyParty(partyId, "move_committed", { gameId: party.game_id });
       if (chess.isGameOver()) {
         let resultCode = "draw", termination = "draw";
         if (chess.isCheckmate()) { resultCode = color === "white" ? "white_win" : "black_win"; termination = "checkmate"; }
@@ -157,7 +178,8 @@ Deno.serve(async (req) => {
         await admin.from("games").update({ status: "completed", result: resultCode, termination, finished_at: new Date().toISOString(), pgn: chess.pgn() }).eq("id", party.game_id);
         await admin.from("chess_parties").update({ status: "finished" }).eq("id", partyId);
       }
-      return json({ move: { from, to, san: result.san, fen: chess.fen(), ply, color }, state: await partyState(partyId) });
+      const state = await partyState(partyId);
+      return json({ move: { from, to, san: result.san, fen: chess.fen(), ply, color }, state });
     }
     if (action === "leave") {
       const { data: party } = await admin.from("chess_parties").select("status,host_user_id").eq("id", partyId).single();
