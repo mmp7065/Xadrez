@@ -745,7 +745,7 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
  async function syncOnlineGame(){if(!partyId)return;try{const state=await partyRequest('state');if(!state.game)return;partyData=state;const fen=state.game.final_fen||state.game.initial_fen;if(game.fen()!==fen){try{const rebuilt=await rebuildOnlineGameHistory(fen);if(!rebuilt)game=new Chess(fen);}catch(e){console.warn('Não foi possível reconstruir o histórico online:',e);game=new Chess(fen);}render();renderMoves();setStatus(game.turn()===(onlineColor==='white'?'w':'b')?'Sua vez.':'Aguardando o adversário…');if(clockOn)startClock();}if(state.game.status==='completed'){started=false;clearInterval(clockTimer);showResultModal(state.game.result,state.game.termination);return;}if(game.turn()===(onlineColor==='white'?'w':'b')&&premoveQueue.length)await consumePremoveQueue();}catch(e){setStatus('Falha ao sincronizar: '+e.message,'check');}}
  async function onlineMove(move,optimistic){if(onlineBusy)return;onlineBusy=true;try{const color=optimistic?.color||onlineColor,{data,error}=await supabase.functions.invoke('chess-party',{body:{action:'move',partyId,from:move.from,to:move.to,promotion:move.promotion||'q',clockRemainingSeconds:color==='white'?whiteTime:blackTime}});if(error)throw new Error(data?.error||error.message);if(data?.error)throw new Error(data.error);if(data.move?.fen&&optimistic&&game.fen()===optimistic.previousFen){game=new Chess(data.move.fen);render();}if(data.game?.status==='completed'){started=false;clearInterval(clockTimer);showResultModal(data.game.result,data.game.termination);}else if(optimistic&&game.fen()===optimistic.optimisticFen)setStatus('Lance confirmado.');}catch(e){setStatus('Não foi possível confirmar o lance. Sincronizando…','check');if(optimistic&&game.fen()===optimistic.optimisticFen){game=new Chess(optimistic.previousFen);render();}await syncOnlineGame();}finally{onlineBusy=false;}}
  
- let resultGameId=null,reviewWorker=null,reviewEngineReady=null,reviewRunning=false,engineEvalQueue=Promise.resolve();
+ let resultGameId=null,reviewWorker=null,reviewWorkerBlobUrl=null,reviewEngineReady=null,reviewRunning=false,engineEvalQueue=Promise.resolve();
  const moveClasses={brilliant:['!!','Brilhante'],great:['!','Excelente jogada'],best:['✓','Melhor jogada'],excellent:['⭐','Excelente alternativa'],good:['','Boa'],interesting:['!?','Interessante'],inaccuracy:['?!','Imprecisão'],mistake:['?','Erro'],blunder:['??','Erro grave'],miss:['✕','Chance perdida'],book:['📖','Abertura teórica'],mate:['#','Xeque-mate']};
  async function loadCompletedGameHistory(){const gid=resultGameId||onlineGameId||savedGameId;if(!gid||!user)return game;const {data,error}=await supabase.from('game_moves').select('ply,san').eq('game_id',gid).order('ply',{ascending:true});if(error)throw error;const replay=new Chess();for(const row of (data||[])){if(!replay.move(row.san))throw new Error('O histórico contém um lance inválido no lance '+row.ply+'.');}if((data||[]).length)game=replay;return game;} function refreshResultSummaryFromGrades(){
   const box=document.getElementById('result-summary');if(!box||!document.getElementById('result-modal').classList.contains('show'))return;
@@ -798,18 +798,27 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
  async function exitFinishedGame(){if(document.getElementById('game-mode').value==='online'&&partyId){document.getElementById('result-foot').textContent='Saindo da festa…';try{await partyRequest('exit_finished');}catch(e){document.getElementById('result-foot').textContent=e.message;return;}if(partyChannel){await supabase.removeChannel(partyChannel);partyChannel=null;}partyId=null;partyData=null;onlineGameId=null;onlineColor=null;closeResult();document.getElementById('back-dashboard').click();return;}closeResult();document.getElementById('back-dashboard').click();}
  function initReviewEngine(){
   if(reviewEngineReady)return reviewEngineReady;
-  reviewEngineReady=new Promise((resolve,reject)=>{
+  reviewEngineReady=new Promise(async(resolve,reject)=>{
    let settled=false,timeout;
-   const finish=(ok,value)=>{if(settled)return;settled=true;clearTimeout(timeout);if(ok)resolve(value);else{reviewEngineReady=null;if(reviewWorker){reviewWorker.terminate();reviewWorker=null;}reject(value);}};
+   const finish=(ok,value)=>{if(settled)return;settled=true;clearTimeout(timeout);if(ok)resolve(value);else{reviewEngineReady=null;if(reviewWorker){reviewWorker.terminate();reviewWorker=null;}if(reviewWorkerBlobUrl){URL.revokeObjectURL(reviewWorkerBlobUrl);reviewWorkerBlobUrl=null;}reject(value);}};
    try{
-    const engineUrl='https://cdn.jsdelivr.net/npm/stockfish@19.0.1/bin/stockfish-19-lite-single.js';
-    reviewWorker=new Worker(engineUrl);
-    const ready=e=>{const line=String(e.data||'');if(line==='uciok')reviewWorker.postMessage('isready');else if(line==='readyok'){reviewWorker.removeEventListener('message',ready);finish(true);}};
-    reviewWorker.addEventListener('message',ready);
-    reviewWorker.onerror=e=>finish(false,new Error('Falha ao carregar Stockfish: '+(e.message||'verifique a conexão com o CDN.')));
-    timeout=setTimeout(()=>finish(false,new Error('O Stockfish não respondeu ao iniciar.')),20000);
-    reviewWorker.postMessage('uci');
-   }catch(e){finish(false,e);}
+    const base='https://cdn.jsdelivr.net/npm/stockfish@19.0.1/bin/';
+    const engineUrl=base+'stockfish-19-lite-single.js';
+    const response=await fetch(engineUrl,{mode:'cors',cache:'force-cache'});
+    if(!response.ok)throw new Error('Não foi possível baixar o Stockfish (HTTP '+response.status+').');
+    const engineSource=await response.text();
+    if(!engineSource||engineSource.length<1000)throw new Error('O arquivo do Stockfish recebido está incompleto.');
+    const bootstrap="self.Module={locateFile:function(path){return '"+base+"'+path;}};\\n";
+    const blob=new Blob([bootstrap,engineSource],{type:'text/javascript'});
+    reviewWorkerBlobUrl=URL.createObjectURL(blob);
+    reviewWorker=new Worker(reviewWorkerBlobUrl);
+    const worker=reviewWorker;
+    const ready=e=>{const line=String(e.data||'');if(line==='uciok')worker.postMessage('isready');else if(line==='readyok'){worker.removeEventListener('message',ready);finish(true);}};
+    worker.addEventListener('message',ready);
+    worker.onerror=e=>finish(false,new Error('Falha ao iniciar Stockfish: '+(e.message||'erro no Worker/WASM.')));
+    timeout=setTimeout(()=>finish(false,new Error('O Stockfish não respondeu ao iniciar em 20 segundos.')),20000);
+    worker.postMessage('uci');
+   }catch(e){finish(false,e instanceof Error?e:new Error(String(e)));}
   });
   return reviewEngineReady;
  }
