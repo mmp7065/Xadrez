@@ -41,8 +41,8 @@ async function partyState(partyId: string) {
   if (party.game_id) {
     const { data } = await admin.from("games").select("id,status,result,termination,time_control_seconds,initial_fen,final_fen,pgn,move_count,created_at").eq("id", party.game_id).maybeSingle();
     game = data;
-    const { data: rows } = await admin.from("game_moves").select("ply,color,san,uci,fen_after,clock_remaining_seconds,created_at").eq("game_id", party.game_id).order("ply");
-    moves = rows || [];
+    // Histórico é carregado separadamente; não buscar todos os lances a cada atualização.
+    moves = [];
   }
   return { party, members: roster, game, moves };
 }
@@ -179,9 +179,16 @@ Deno.serve(async (req) => {
         await admin.from("games").update({ status: "completed", result: resultCode, termination, finished_at: new Date().toISOString(), pgn: chess.pgn() }).eq("id", party.game_id);
         await admin.from("chess_parties").update({ status: "finished" }).eq("id", partyId);
       }
-      await notifyParty(partyId, "move_committed", { gameId: party.game_id });
-      const state = await partyState(partyId);
-      return json({ move: { from, to, san: result.san, fen: chess.fen(), ply, color }, state });
+      const finished = chess.isGameOver();
+      await notifyParty(partyId, "move_committed", {
+        gameId: party.game_id, fen: chess.fen(), from, to, san: result.san, ply, color,
+        status: finished ? "finished" : "in_game", promotion: result.promotion || null,
+        clockRemainingSeconds: Math.max(0, Number(body.clockRemainingSeconds) || 0),
+      });
+      return json({
+        move: { from, to, san: result.san, fen: chess.fen(), ply, color },
+        game: { id: party.game_id, status: finished ? "completed" : "in_progress", result: finished ? (chess.isCheckmate() ? (color === "white" ? "white_win" : "black_win") : "draw") : null, time_control_seconds: gameRow.time_control_seconds },
+      });
     }
     if (action === "leave") {
       const { data: party } = await admin.from("chess_parties").select("status,host_user_id").eq("id", partyId).single();
