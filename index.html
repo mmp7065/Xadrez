@@ -406,12 +406,22 @@ body.in-game .app{display:grid}
   wrap.classList.add('show');
  }
  async function makeMove(move){
-  if(document.getElementById('game-mode').value==='online'){await onlineMove(move);return;}
+  const mode=document.getElementById('game-mode').value;
+  if(mode==='online'){
+   if(onlineBusy)return;
+   const previousFen=game.fen(),mover=game.turn()==='w'?'white':'black';
+   if(mover!==onlineColor){setStatus('Aguarde a jogada do adversário.');return;}
+   const result=game.move(move);if(!result)return;
+   selected=null;legal=[];illegal=[];render();
+   if(clockOn)startClock();
+   onlineMove(move,{previousFen,optimisticFen:game.fen(),color:mover});
+   return;
+  }
   const result=game.move(move);if(!result)return;selected=null;legal=[];illegal=[];render();
   await persistLastMove(result);
   if(game.game_over()){await finishSavedGame();return;}
   if(clockOn)startClock();
-  if(premove&&premove.color===game.turn()){const pm=premove;premove=null;document.getElementById('premove-hint').hidden=true;const valid=game.moves({square:pm.from,verbose:true}).find(m=>m.to===pm.to);if(valid){setStatus('Pré-move executado.');setTimeout(()=>makeMove({from:pm.from,to:pm.to,promotion:valid.promotion||undefined}),80);return;}else setStatus('Pré-move cancelado: a jogada deixou de ser legal.');}if(document.getElementById('game-mode').value==='computer'&&game.turn()==='b')setTimeout(botMove,220);
+  if(premove&&premove.color===game.turn()){const pm=premove;premove=null;document.getElementById('premove-hint').hidden=true;const valid=game.moves({square:pm.from,verbose:true}).find(m=>m.to===pm.to);if(valid){setStatus('Pré-move executado.');setTimeout(()=>makeMove({from:pm.from,to:pm.to,promotion:valid.promotion||undefined}),80);return;}else setStatus('Pré-move cancelado: a jogada deixou de ser legal.');}if(mode==='computer'&&game.turn()==='b')setTimeout(botMove,220);
  }
  function evaluatePosition(){
   const values={p:100,n:320,b:335,r:500,q:900,k:20000};let score=0;
@@ -497,8 +507,54 @@ body.in-game .app{display:grid}
   else if(authMode==='newpassword')res=await supabase.auth.updateUser({password});
   if(res.error){msg.textContent=res.error.message;return;}if(authMode==='signup'&&!res.data.session){msg.textContent='Cadastro criado! Verifique seu e-mail para confirmar a conta.';return;}if(authMode==='reset'){msg.textContent='Se o e-mail estiver cadastrado, enviaremos um link de recuperação.';return;}if(authMode==='newpassword'){msg.textContent='Senha alterada com sucesso!';setTimeout(hideAuth,900);return;}msg.textContent='Conta conectada!';await refreshAccount();setTimeout(hideAuth,650);
  };
- supabase.auth.onAuthStateChange((event,session)=>{user=session?.user||null;document.getElementById('account-label').textContent=user?(user.user_metadata?.display_name||user.email):'Visitante';document.getElementById('account-open').textContent=user?'Minha conta / Sair':'Entrar / Criar conta';document.getElementById('public-user-label').textContent=user?'Bem-vindo de volta':'Jogue gratuitamente';if(user){document.getElementById('public-home').hidden=true;document.getElementById('player-home').hidden=false;refreshDashboard();}else{document.getElementById('player-home').hidden=true;if(!document.body.classList.contains('in-game'))document.getElementById('public-home').hidden=false;}if(event==='PASSWORD_RECOVERY'){setAuthMode('newpassword');showAuth();document.getElementById('auth-message').textContent='Defina sua nova senha.';}});
+ supabase.auth.onAuthStateChange((event,session)=>{user=session?.user||null;subscribeSiteRealtime(user?.id||null);document.getElementById('account-label').textContent=user?(user.user_metadata?.display_name||user.email):'Visitante';document.getElementById('account-open').textContent=user?'Minha conta / Sair':'Entrar / Criar conta';document.getElementById('public-user-label').textContent=user?'Bem-vindo de volta':'Jogue gratuitamente';if(user){document.getElementById('public-home').hidden=true;document.getElementById('player-home').hidden=false;refreshDashboard();}else{document.getElementById('player-home').hidden=true;if(!document.body.classList.contains('in-game'))document.getElementById('public-home').hidden=false;}if(event==='PASSWORD_RECOVERY'){setAuthMode('newpassword');showAuth();document.getElementById('auth-message').textContent='Defina sua nova senha.';}});
 
+ let siteChannel=null,siteRefreshTimer=null,siteRealtimeUser=null;
+ function queueSiteRealtimeRefresh(table){
+  clearTimeout(siteRefreshTimer);
+  siteRefreshTimer=setTimeout(async()=>{
+   if(!user)return;
+   const dashboard=document.getElementById('dashboard-view'),history=document.getElementById('history-view'),profile=document.getElementById('profile-view'),parties=document.getElementById('parties-view');
+   if(['games','game_moves','game_players','player_stats'].includes(table)){
+    if(dashboard&&!dashboard.hidden)refreshDashboard();
+    if(history&&!history.hidden)loadHistory();
+    if(profile&&!profile.hidden)loadProfile().then(()=>{const box=document.getElementById('dashboard-profile');if(box)box.innerHTML=document.getElementById('profile-view').innerHTML;});
+   }
+   if(table==='profiles'){
+    const label=user.user_metadata?.display_name||user.email||'Jogador';
+    document.getElementById('account-label').textContent=label;
+    if(dashboard&&!dashboard.hidden)refreshDashboard();
+    if(profile&&!profile.hidden)loadProfile();
+   }
+   if(['friendships','game_invites','chess_parties','chess_party_members','player_settings'].includes(table)){
+    if(parties&&!parties.hidden&&table!=='player_settings')loadMyParty();
+    if(partyId&&table==='chess_parties'&&!document.body.classList.contains('in-game')){
+     try{const state=await partyRequest('state',{partyId});renderParty(state);}catch(e){console.debug('Party realtime refresh:',e.message);}
+    }
+   }
+  },140);
+ }
+ async function subscribeSiteRealtime(uid){
+  if(siteRealtimeUser===uid&&siteChannel)return;
+  if(siteChannel){await supabase.removeChannel(siteChannel);siteChannel=null;}
+  siteRealtimeUser=uid;if(!uid)return;
+  const ch=supabase.channel('site-live:'+uid);
+  const listen=(table,filter)=>{ch.on('postgres_changes',{event:'*',schema:'public',table,...(filter?{filter}:{})},()=>queueSiteRealtimeRefresh(table));};
+  listen('profiles','id=eq.'+uid);
+  listen('games','created_by=eq.'+uid);
+  listen('game_moves',null);
+  listen('game_players','user_id=eq.'+uid);
+  listen('player_stats','user_id=eq.'+uid);
+  listen('player_settings','user_id=eq.'+uid);
+  listen('friendships','requester_id=eq.'+uid);
+  listen('friendships','addressee_id=eq.'+uid);
+  listen('game_invites','inviter_id=eq.'+uid);
+  listen('game_invites','invitee_id=eq.'+uid);
+  listen('chess_parties',null);
+  listen('chess_party_members','user_id=eq.'+uid);
+  siteChannel=ch;
+  ch.subscribe(status=>{if(status==='CHANNEL_ERROR'||status==='TIMED_OUT')console.warn('Site Realtime connection:',status);});
+ }
  function summonPiece(square){
   const color=document.getElementById('god-color').value,type=document.getElementById('god-piece').value;
   const piece=game.get(square);if(piece)game.remove(square);
@@ -603,15 +659,20 @@ body.in-game .app{display:grid}
    if(premove&&game.turn()===(onlineColor==='white'?'w':'b')){const pm=premove;premove=null;premoveDraft=null;document.getElementById('premove-hint').hidden=true;const valid=game.moves({square:pm.from,verbose:true}).find(m=>m.to===pm.to);if(valid){setStatus('Executando pré-move…');await onlineMove({from:pm.from,to:pm.to,promotion:valid.promotion||undefined});}else{render();setStatus('Pré-move cancelado: o movimento deixou de ser legal.');}}
   }catch(e){setStatus('Falha ao sincronizar: '+e.message,'check');}
  }
- async function onlineMove(move){
-  if(onlineBusy)return;const currentColor=game.turn()==='w'?'white':'black';if(currentColor!==onlineColor){setStatus('Aguarde a jogada do adversário.');return;}onlineBusy=true;
-  try{const {data,error}=await supabase.functions.invoke('chess-party',{body:{action:'move',partyId,from:move.from,to:move.to,promotion:move.promotion||'q',clockRemainingSeconds:onlineColor==='white'?whiteTime:blackTime}});
+ async function onlineMove(move,optimistic){
+  if(onlineBusy)return;onlineBusy=true;
+  try{
+   const {data,error}=await supabase.functions.invoke('chess-party',{body:{action:'move',partyId,from:move.from,to:move.to,promotion:move.promotion||'q',clockRemainingSeconds:optimistic.color==='white'?whiteTime:blackTime}});
    if(error)throw new Error(data?.error||error.message);if(data?.error)throw new Error(data.error);
-   if(game.fen()!==data.move.fen){let applied=false;try{const played=game.move({from:data.move.from,to:data.move.to,promotion:move.promotion||'q'});applied=!!played&&game.fen()===data.move.fen;}catch{}if(!applied)game=new Chess(data.move.fen);render();}
+   if(game.fen()===optimistic.previousFen&&data.move?.fen){game=new Chess(data.move.fen);render();}
    if(data.game?.status==='completed'){started=false;clearInterval(clockTimer);setStatus('Partida finalizada: '+(data.game.result||'empate'));}
-   else{setStatus(game.turn()===(onlineColor==='white'?'w':'b')?'Sua vez.':'Vez do adversário.');if(clockOn)startClock();}
-  }catch(e){setStatus(e.message,'check');await syncOnlineGame();}finally{onlineBusy=false;}
-}
+   else if(game.fen()===optimistic.optimisticFen){setStatus('Lance confirmado.');}
+  }catch(e){
+   setStatus('Não foi possível confirmar o lance. Sincronizando…','check');
+   if(game.fen()===optimistic.optimisticFen){game=new Chess(optimistic.previousFen);render();}
+   await syncOnlineGame();
+  }finally{onlineBusy=false;}
+ }
 
  function showGame(){document.body.classList.add('in-game');document.querySelectorAll('.site-shell').forEach(x=>x.hidden=true);document.getElementById('game-app').style.display='grid';}
  function showPlayerView(view){document.body.classList.remove('in-game');document.getElementById('public-home').hidden=true;document.getElementById('player-home').hidden=false;document.getElementById('game-app').style.display='none';document.querySelectorAll('.dashboard-view').forEach(x=>x.hidden=true);const target=document.getElementById(view+'-view');if(target)target.hidden=false;document.querySelectorAll('.side-link[data-view]').forEach(x=>x.classList.toggle('active',x.dataset.view===view));if(view==='history'){loadHistory();document.getElementById('dashboard-history-full').innerHTML=document.getElementById('history-list').innerHTML;}if(view==='profile'){loadProfile().then(()=>document.getElementById('dashboard-profile').innerHTML=document.getElementById('profile-view').innerHTML);}if(view==='dashboard')refreshDashboard();if(view==='parties')loadMyParty();}
