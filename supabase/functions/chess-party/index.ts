@@ -153,45 +153,55 @@ Deno.serve(async (req) => {
       if (!party || party.status !== "finished" || !party.game_id) throw new Error("A revanche só pode ser solicitada após o fim da partida.");
       const { data: players } = await admin.from("game_players").select("user_id,color,player_type").eq("game_id", party.game_id).order("color");
       const { count: activeMembers } = await admin.from("chess_party_members").select("user_id", { count: "exact", head: true }).eq("party_id", partyId);
-      if (activeMembers !== 2) throw new Error("Seu adversário saiu da festa. Não é possível iniciar uma revanche.");
-      if (!players || players.length !== 2 || !players.some((p) => p.user_id === user.id)) throw new Error("Você não participa desta partida.");
+      if (activeMembers !== 2 || !players || players.length !== 2 || !players.some((p) => p.user_id === user.id)) throw new Error("Os dois jogadores precisam continuar na festa para pedir revanche.");
       let { data: request } = await admin.from("chess_party_rematches").select("*").eq("party_id", partyId).eq("previous_game_id", party.game_id).maybeSingle();
       if (!request) {
-        const { data: inserted, error: insertError } = await admin.from("chess_party_rematches").insert({
-          party_id: partyId, previous_game_id: party.game_id, requested_by: user.id, status: "pending"
-        }).select("*").single();
-        if (insertError) {
-          const { data: raced } = await admin.from("chess_party_rematches").select("*").eq("party_id", partyId).eq("previous_game_id", party.game_id).maybeSingle();
-          request = raced;
-        } else request = inserted;
+        const { data: inserted, error } = await admin.from("chess_party_rematches").insert({ party_id: partyId, previous_game_id: party.game_id, requested_by: user.id, status: "pending" }).select("*").single();
+        if (error) throw error;
+        request = inserted;
+      } else if (request.status === "cancelled") {
+        const { data: reopened, error } = await admin.from("chess_party_rematches").update({ requested_by: user.id, accepted_by: null, new_game_id: null, status: "pending", updated_at: new Date().toISOString() }).eq("id", request.id).eq("status", "cancelled").select("*").single();
+        if (error) throw error;
+        request = reopened;
+      } else if (request.status === "started" && request.new_game_id) {
+        return json({ status: "started", ...(await partyState(partyId)) });
+      } else if (request.requested_by !== user.id) {
+        throw new Error("Seu adversário já enviou um pedido. Aceite ou recuse a notificação.");
       }
-      if (!request) throw new Error("Não foi possível registrar a revanche.");
-      if (request.status === "started" && request.new_game_id) return json({ status: "started", ...(await partyState(partyId)) });
-      if (request.requested_by === user.id) {
-        await notifyParty(partyId, "rematch_requested", { requestedBy: user.id });
-        return json({ status: "pending", requestedBy: user.id });
-      }
-      const opponent = players.find((p) => p.user_id !== user.id);
-      if (!opponent) throw new Error("Adversário não encontrado.");
+      await notifyParty(partyId, "rematch_requested", { requestedBy: user.id, requestId: request.id });
+      return json({ status: "pending", requestedBy: user.id, requestId: request.id });
+    }
+    if (action === "rematch_decline") {
+      const { data: party } = await admin.from("chess_parties").select("game_id,status").eq("id", partyId).single();
+      if (!party || party.status !== "finished" || !party.game_id) throw new Error("Esta partida não está aguardando revanche.");
+      const { data: request } = await admin.from("chess_party_rematches").select("*").eq("party_id", partyId).eq("previous_game_id", party.game_id).eq("status", "pending").maybeSingle();
+      if (!request || request.requested_by === user.id) throw new Error("Não existe um pedido de revanche do adversário para recusar.");
+      const { error } = await admin.from("chess_party_rematches").update({ status: "cancelled", updated_at: new Date().toISOString() }).eq("id", request.id).eq("status", "pending");
+      if (error) throw error;
+      await notifyParty(partyId, "rematch_declined", { requestedBy: request.requested_by, declinedBy: user.id });
+      return json({ status: "cancelled" });
+    }
+    if (action === "rematch_accept") {
+      const { data: party } = await admin.from("chess_parties").select("*").eq("id", partyId).single();
+      if (!party || party.status !== "finished" || !party.game_id) throw new Error("Esta partida não está aguardando revanche.");
+      const { data: request } = await admin.from("chess_party_rematches").select("*").eq("party_id", partyId).eq("previous_game_id", party.game_id).eq("status", "pending").maybeSingle();
+      if (!request || request.requested_by === user.id) throw new Error("Não existe um pedido de revanche pendente do adversário.");
+      const { data: players } = await admin.from("game_players").select("user_id,color,player_type").eq("game_id", party.game_id).order("color");
+      const { count: activeMembers } = await admin.from("chess_party_members").select("user_id", { count: "exact", head: true }).eq("party_id", partyId);
+      if (activeMembers !== 2 || !players || players.length !== 2 || !players.some((p) => p.user_id === user.id)) throw new Error("Os dois jogadores precisam continuar na festa.");
       const { data: newGame, error: gameError } = await admin.from("games").insert({
-        created_by: party.host_user_id, mode: "online", status: "in_progress",
-        time_control_seconds: party.time_control_seconds, party_id: partyId,
+        created_by: party.host_user_id, mode: "online", status: "in_progress", time_control_seconds: party.time_control_seconds, party_id: partyId,
         initial_fen: new Chess().fen(), final_fen: new Chess().fen(), move_count: 0
       }).select("id").single();
       if (gameError) throw gameError;
-      const { error: playersError } = await admin.from("game_players").insert(players.map((p) => ({
-        game_id: newGame.id, user_id: p.user_id, color: p.color, player_type: p.player_type || "human"
-      })));
+      const { error: playersError } = await admin.from("game_players").insert(players.map((p) => ({ game_id: newGame.id, user_id: p.user_id, color: p.color, player_type: p.player_type || "human" })));
       if (playersError) throw playersError;
-      const { error: partyError } = await admin.from("chess_parties").update({ game_id: newGame.id, status: "in_game" }).eq("id", partyId).eq("status", "finished");
-      if (partyError) throw partyError;
-      const { error: requestError } = await admin.from("chess_party_rematches").update({
-        accepted_by: user.id, status: "started", new_game_id: newGame.id, updated_at: new Date().toISOString()
-      }).eq("id", request.id).eq("status", "pending");
-      if (requestError) throw requestError;
+      const { data: claimed, error: claimError } = await admin.from("chess_party_rematches").update({ accepted_by: user.id, status: "started", new_game_id: newGame.id, updated_at: new Date().toISOString() }).eq("id", request.id).eq("status", "pending").select("id").maybeSingle();
+      if (claimError || !claimed) throw new Error("Este pedido já foi respondido. Atualize a festa.");
+      const { data: updatedParty, error: partyError } = await admin.from("chess_parties").update({ game_id: newGame.id, status: "in_game" }).eq("id", partyId).eq("status", "finished").select("id").maybeSingle();
+      if (partyError || !updatedParty) throw new Error("Não foi possível abrir a revanche. Atualize a festa.");
       await admin.from("chess_party_members").update({ assigned_color: null }).eq("party_id", partyId);
-      await admin.from("chess_party_members").update({ assigned_color: players.find((p) => p.user_id === party.host_user_id)?.color || null }).eq("party_id", partyId).eq("user_id", party.host_user_id);
-      await admin.from("chess_party_members").update({ assigned_color: opponent.color }).eq("party_id", partyId).eq("user_id", opponent.user_id);
+      for (const p of players) await admin.from("chess_party_members").update({ assigned_color: p.color }).eq("party_id", partyId).eq("user_id", p.user_id);
       const state = await partyState(partyId);
       await notifyParty(partyId, "rematch_started", { gameId: newGame.id });
       return json({ status: "started", ...state });
