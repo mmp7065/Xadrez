@@ -585,8 +585,11 @@ body.in-game .app{display:grid}
  async function launchPartyGame(state){if(!state?.game||state.party.status!=='in_game')return;if(onlineGameId===state.game.id&&document.body.classList.contains('in-game'))return;const seat=state.members.find(m=>m.user_id===user.id);if(!seat?.assigned_color)return;onlineGameId=state.game.id;onlineColor=seat.assigned_color;partyId=state.party.id;partyData=state;document.getElementById('game-mode').value='online';document.getElementById('time-control').value=String(state.game.time_control_seconds||0);showGame();init();game=new Chess(state.game.final_fen||state.game.initial_fen);started=true;clockOn=Number(state.game.time_control_seconds)>0;whiteTime=blackTime=Number(state.game.time_control_seconds)||0;flipped=onlineColor==='black';document.querySelector('.game-area').classList.add('online-opponent');document.querySelector('.playerbar.top .player-meta span').textContent=(state.members.find(m=>m.assigned_color!==onlineColor)?.profile?.display_name)||'Adversário';document.querySelector('.playerbar.bottom .player-meta span').textContent=user.user_metadata?.display_name||user.email||'Você';document.getElementById('cloud-status').textContent='☁ Festa online · '+state.party.code;document.body.classList.add('playing');render();updateClocks();setStatus(game.turn()===(onlineColor==='white'?'w':'b')?'Sua vez!':'Aguardando o adversário…');if(clockOn)startClock();}
  function applyRealtimeMove(notice){
   if(!notice?.fen||!document.body.classList.contains('in-game'))return;
-  const nextPly=Number(notice.ply)||0,currentPly=game.history().length;if(nextPly&&nextPly<=currentPly)return;
-  game=new Chess(notice.fen);render();
+  if(game.fen()===notice.fen)return;
+  let applied=false;
+  try{const move=game.move({from:notice.from,to:notice.to,promotion:notice.promotion||'q'});applied=!!move&&game.fen()===notice.fen;}catch{}
+  if(!applied)game=new Chess(notice.fen);
+  render();
   if(notice.color==='white'&&clockOn)whiteTime=Math.max(0,Number(notice.clockRemainingSeconds)||whiteTime);
   if(notice.color==='black'&&clockOn)blackTime=Math.max(0,Number(notice.clockRemainingSeconds)||blackTime);
   if(notice.status==='finished'||game.game_over()){started=false;clearInterval(clockTimer);premove=null;premoveDraft=null;document.getElementById('premove-hint').hidden=true;setStatus('Partida finalizada'+(game.is_checkmate()?' · Xeque-mate':'')+'.');return;}
@@ -603,7 +606,8 @@ body.in-game .app{display:grid}
  async function onlineMove(move){
   if(onlineBusy)return;const currentColor=game.turn()==='w'?'white':'black';if(currentColor!==onlineColor){setStatus('Aguarde a jogada do adversário.');return;}onlineBusy=true;
   try{const {data,error}=await supabase.functions.invoke('chess-party',{body:{action:'move',partyId,from:move.from,to:move.to,promotion:move.promotion||'q',clockRemainingSeconds:onlineColor==='white'?whiteTime:blackTime}});
-   if(error)throw new Error(data?.error||error.message);if(data?.error)throw new Error(data.error);game=new Chess(data.move.fen);render();
+   if(error)throw new Error(data?.error||error.message);if(data?.error)throw new Error(data.error);
+   if(game.fen()!==data.move.fen){let applied=false;try{const played=game.move({from:data.move.from,to:data.move.to,promotion:move.promotion||'q'});applied=!!played&&game.fen()===data.move.fen;}catch{}if(!applied)game=new Chess(data.move.fen);render();}
    if(data.game?.status==='completed'){started=false;clearInterval(clockTimer);setStatus('Partida finalizada: '+(data.game.result||'empate'));}
    else{setStatus(game.turn()===(onlineColor==='white'?'w':'b')?'Sua vez.':'Vez do adversário.');if(clockOn)startClock();}
   }catch(e){setStatus(e.message,'check');await syncOnlineGame();}finally{onlineBusy=false;}
