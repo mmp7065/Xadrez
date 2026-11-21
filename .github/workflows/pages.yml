@@ -23,6 +23,14 @@ jobs:
         uses: actions/configure-pages@v5
         with:
           enablement: true
+      - name: Bundle Stockfish for same-origin hosting
+        run: |
+          mkdir -p /tmp/stockfish-package engine
+          npm pack stockfish@19.0.1 --pack-destination /tmp
+          tar -xzf /tmp/stockfish-19.0.1.tgz -C /tmp/stockfish-package
+          cp /tmp/stockfish-package/package/bin/stockfish-19-lite-single.js engine/
+          cp /tmp/stockfish-package/package/bin/stockfish-19-lite-single.wasm engine/
+          cp /tmp/stockfish-package/package/Copying.txt engine/
       - name: Upload site
         uses: actions/upload-pages-artifact@v3
         with:
