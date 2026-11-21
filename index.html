@@ -40,6 +40,15 @@ button{ -webkit-tap-highlight-color:transparent }
 .board{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));grid-template-rows:repeat(8,minmax(0,1fr));width:100%;height:100%;overflow:hidden;border-radius:3px}
 .square{border:0;padding:0;margin:0;min-width:0;min-height:0;position:relative;display:grid;place-items:center;cursor:pointer;user-select:none;touch-action:manipulation}
 .square.light{background:var(--light)}.square.dark{background:var(--dark)}
+.square.grade-brilliant,.square.grade-great,.square.grade-best,.square.grade-excellent{background:#b8e77a!important}
+.square.grade-good,.square.grade-interesting{background:#c5e99a!important}
+.square.grade-inaccuracy{background:#f5d76e!important}
+.square.grade-mistake,.square.grade-blunder,.square.grade-miss{background:#f58b79!important}
+.square.grade-book{background:#a9d7e9!important}
+.square.grade-mate{background:#b9b5ac!important}
+.square .piece-grade{position:absolute;z-index:6;top:2px;right:2px;width:clamp(17px,2.2vw,27px);height:clamp(17px,2.2vw,27px);border-radius:50%;display:grid;place-items:center;color:#fff;font-size:clamp(10px,1.35vw,17px);font-weight:1000;line-height:1;text-shadow:0 1px 2px #0005;box-shadow:0 1px 3px #0005;pointer-events:none}
+.square .piece-grade.grade-brilliant{background:#10b9a8}.square .piece-grade.grade-great{background:#80bd55}.square .piece-grade.grade-best,.square .piece-grade.grade-excellent{background:#91c83e}.square .piece-grade.grade-good{background:#56b94d}.square .piece-grade.grade-interesting{background:#8d88c4}.square .piece-grade.grade-inaccuracy{background:#e7b52d;color:#29251d}.square .piece-grade.grade-mistake,.square .piece-grade.grade-blunder,.square .piece-grade.grade-miss{background:#ed413b}.square .piece-grade.grade-book{background:#ad8b69}.square .piece-grade.grade-mate{background:#30302e}
+
 .square:hover{filter:brightness(1.035)}
 .square.selected:after{content:"";position:absolute;inset:0;background:#f6f66991;pointer-events:none}
 .square.last:after{content:"";position:absolute;inset:0;background:#f6f6695c;pointer-events:none}
@@ -362,6 +371,7 @@ body.in-game .app{display:grid}
   const ranks=flipped?[1,2,3,4,5,6,7,8]:[8,7,6,5,4,3,2,1],cols=flipped?[...'hgfedcba']:[...'abcdefgh'];
   const check=game.in_check(),checkedKing=check?kingSquare(game.turn()):null;
   const history=game.history({verbose:true}),last=history[history.length-1];
+  const pieceGrades=livePieceGradePositions(history);
   ranks.forEach((rank,ri)=>cols.forEach((file,ci)=>{
    const sq=file+rank,piece=game.get(sq),el=document.createElement('button');
    el.className='square '+(((files.indexOf(file)+(8-rank))%2===0)?'light':'dark');
@@ -370,7 +380,7 @@ body.in-game .app{display:grid}
    if(check&&checkedKing===sq)el.classList.add('in-check');
    if(ri===0){const c=document.createElement('span');c.className='coord rank';c.textContent=rank;el.append(c);}
    if(ri===7){const c=document.createElement('span');c.className='coord file';c.textContent=file;el.append(c);}
-   if(piece){const span=document.createElement('span');span.className='piece '+(piece.color==='w'?'white':'black');span.textContent=glyph[piece.color+piece.type];el.append(span);}if(queued.length){const ghost=document.createElement('span'),planned=queued[queued.length-1];ghost.className='premove-ghost';ghost.textContent=glyph[(planned.color||'w')+(planned.pieceType||'q')];el.append(ghost);const n=document.createElement('span');n.className='premove-number';n.textContent=queued.map(q=>q.index).join('/');el.append(n);}
+   if(piece){const span=document.createElement('span');span.className='piece '+(piece.color==='w'?'white':'black');span.textContent=glyph[piece.color+piece.type];el.append(span);}const pieceGrade=pieceGrades[sq];if(piece&&pieceGrade){const badge=document.createElement('span');badge.className='piece-grade grade-'+pieceGrade;badge.textContent=liveMoveLabels[pieceGrade]?.[0]||'✓';badge.title=liveMoveLabels[pieceGrade]?.[1]||pieceGrade;el.append(badge);}if(queued.length){const ghost=document.createElement('span'),planned=queued[queued.length-1];ghost.className='premove-ghost';ghost.textContent=glyph[(planned.color||'w')+(planned.pieceType||'q')];el.append(ghost);const n=document.createElement('span');n.className='premove-number';n.textContent=queued.map(q=>q.index).join('/');el.append(n);}
    if(legal.some(m=>m.to===sq)){const mark=document.createElement('span');mark.className=piece?'capture-mark':'dot';el.append(mark);}
    else if(illegal.includes(sq)){const mark=document.createElement('span');mark.className=piece?'capture-mark illegal-capture':'dot illegal-dot';el.append(mark);}
    el.dataset.square=sq;boardEl.append(el);
@@ -663,10 +673,18 @@ body.in-game .app{display:grid}
  function stockfishEval(fen){return new Promise((resolve,reject)=>{let score=0,mate=null,done=false;const listener=e=>{const l=String(e.data||''),cp=l.match(/score cp (-?\d+)/),mt=l.match(/score mate (-?\d+)/);if(cp)score=Number(cp[1]);if(mt)mate=Number(mt[1]);if(l.startsWith('bestmove')){done=true;reviewWorker.removeEventListener('message',listener);const raw=mate===null?score:(mate>0?100000:-100000);resolve({cp:fen.split(' ')[1]==='w'?raw:-raw,mate});}};reviewWorker.addEventListener('message',listener);reviewWorker.postMessage('position fen '+fen);reviewWorker.postMessage('go depth 9');setTimeout(()=>{if(!done){reviewWorker.postMessage('stop');reviewWorker.removeEventListener('message',listener);reject(new Error('Tempo de análise excedido.'));}},18000);});}
  
  const liveMoveLabels={brilliant:['⚡','Brilhante','Sacrifício excepcional'],great:['!','Excelente jogada','Jogada crítica'],best:['✓','Melhor jogada','A melhor escolha do motor'],excellent:['⭐','Excelente alternativa','Muito próxima da melhor'],good:['👍','Boa jogada','Lance sólido'],interesting:['!?','Interessante','Ideia inesperada'],inaccuracy:['?!','Imprecisão','Havia uma opção melhor'],mistake:['?','Erro','Você perdeu parte da vantagem'],blunder:['??','Erro grave','Grande perda de avaliação'],miss:['✕','Chance perdida','Uma oportunidade não foi aproveitada'],book:['📖','Abertura teórica','Jogada conhecida da teoria'],mate:['#','Xeque-mate','A partida terminou'],draw:['½','Empate','Meio ponto para cada jogador']};
+ function livePieceGradePositions(history){
+  const positions={},replay=new Chess();
+  history.forEach((move,index)=>{
+   const carried=positions[move.from];delete positions[move.from];delete positions[move.to];
+   const grade=moveGrades[index+1];if(grade)positions[move.to]=grade;else if(carried)positions[move.to]=carried;
+   try{replay.move(move);}catch{}
+  });
+  return positions;
+ }
  function showMoveFeedback(cls,ply,san){
-  const data=liveMoveLabels[cls]||liveMoveLabels.good,box=document.getElementById('move-feedback');if(!box)return;
-  box.className='move-feedback visible class-'+cls;document.getElementById('feedback-symbol').textContent=data[0];document.getElementById('feedback-title').textContent=data[1];document.getElementById('feedback-detail').textContent='Lance '+Math.ceil(ply/2)+(ply%2?'. Brancas':'… Pretas')+' · '+san+' · '+data[2];
-  clearTimeout(feedbackTimer);feedbackTimer=setTimeout(()=>box.classList.remove('visible'),4200);
+  const box=document.getElementById('move-feedback');if(box)box.classList.remove('visible');
+  render();
  }
  function liveBookMove(sans,i){return isBook(sans,i);}
  async function classifyLiveMove(beforeFen,afterFen,move,ply,sans){
