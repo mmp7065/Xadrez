@@ -148,6 +148,61 @@ Deno.serve(async (req) => {
       if (updateError) throw updateError;
       return json(await partyState(partyId));
     }
+    if (action === "rematch") {
+      const { data: party } = await admin.from("chess_parties").select("*").eq("id", partyId).single();
+      if (!party || party.status !== "finished" || !party.game_id) throw new Error("A revanche só pode ser solicitada após o fim da partida.");
+      const { data: players } = await admin.from("game_players").select("user_id,color,player_type").eq("game_id", party.game_id).order("color");
+      const { count: activeMembers } = await admin.from("chess_party_members").select("user_id", { count: "exact", head: true }).eq("party_id", partyId);
+      if (activeMembers !== 2) throw new Error("Seu adversário saiu da festa. Não é possível iniciar uma revanche.");
+      if (!players || players.length !== 2 || !players.some((p) => p.user_id === user.id)) throw new Error("Você não participa desta partida.");
+      let { data: request } = await admin.from("chess_party_rematches").select("*").eq("party_id", partyId).eq("previous_game_id", party.game_id).maybeSingle();
+      if (!request) {
+        const { data: inserted, error: insertError } = await admin.from("chess_party_rematches").insert({
+          party_id: partyId, previous_game_id: party.game_id, requested_by: user.id, status: "pending"
+        }).select("*").single();
+        if (insertError) {
+          const { data: raced } = await admin.from("chess_party_rematches").select("*").eq("party_id", partyId).eq("previous_game_id", party.game_id).maybeSingle();
+          request = raced;
+        } else request = inserted;
+      }
+      if (!request) throw new Error("Não foi possível registrar a revanche.");
+      if (request.status === "started" && request.new_game_id) return json({ status: "started", ...(await partyState(partyId)) });
+      if (request.requested_by === user.id) {
+        await notifyParty(partyId, "rematch_requested", { requestedBy: user.id });
+        return json({ status: "pending", requestedBy: user.id });
+      }
+      const opponent = players.find((p) => p.user_id !== user.id);
+      if (!opponent) throw new Error("Adversário não encontrado.");
+      const { data: newGame, error: gameError } = await admin.from("games").insert({
+        created_by: party.host_user_id, mode: "online", status: "in_progress",
+        time_control_seconds: party.time_control_seconds, party_id: partyId,
+        initial_fen: new Chess().fen(), final_fen: new Chess().fen(), move_count: 0
+      }).select("id").single();
+      if (gameError) throw gameError;
+      const { error: playersError } = await admin.from("game_players").insert(players.map((p) => ({
+        game_id: newGame.id, user_id: p.user_id, color: p.color, player_type: p.player_type || "human"
+      })));
+      if (playersError) throw playersError;
+      const { error: partyError } = await admin.from("chess_parties").update({ game_id: newGame.id, status: "in_game" }).eq("id", partyId).eq("status", "finished");
+      if (partyError) throw partyError;
+      const { error: requestError } = await admin.from("chess_party_rematches").update({
+        accepted_by: user.id, status: "started", new_game_id: newGame.id, updated_at: new Date().toISOString()
+      }).eq("id", request.id).eq("status", "pending");
+      if (requestError) throw requestError;
+      await admin.from("chess_party_members").update({ assigned_color: null }).eq("party_id", partyId);
+      await admin.from("chess_party_members").update({ assigned_color: players.find((p) => p.user_id === party.host_user_id)?.color || null }).eq("party_id", partyId).eq("user_id", party.host_user_id);
+      await admin.from("chess_party_members").update({ assigned_color: opponent.color }).eq("party_id", partyId).eq("user_id", opponent.user_id);
+      const state = await partyState(partyId);
+      await notifyParty(partyId, "rematch_started", { gameId: newGame.id });
+      return json({ status: "started", ...state });
+    }
+    if (action === "exit_finished") {
+      const { data: party } = await admin.from("chess_parties").select("status").eq("id", partyId).single();
+      if (!party || party.status !== "finished") throw new Error("A festa ainda não terminou.");
+      await admin.from("chess_party_members").delete().eq("party_id", partyId).eq("user_id", user.id);
+      await notifyParty(partyId, "player_left", { userId: user.id });
+      return json({ ok: true });
+    }
     if (action === "move") {
       const { data: party } = await admin.from("chess_parties").select("game_id,status").eq("id", partyId).single();
       if (!party?.game_id || party.status !== "in_game") throw new Error("A partida não está ativa.");
@@ -183,7 +238,15 @@ Deno.serve(async (req) => {
       await notifyParty(partyId, "move_committed", {
         gameId: party.game_id, fen: chess.fen(), from, to, san: result.san, ply, color,
         status: finished ? "finished" : "in_game", promotion: result.promotion || null,
+        result: finished ? (chess.isCheckmate() ? (color === "white" ? "white_win" : "black_win") : "draw") : null,
+        termination: finished ? (chess.isCheckmate() ? "checkmate" : chess.isStalemate() ? "stalemate" : "draw") : null,
         clockRemainingSeconds: Math.max(0, Number(body.clockRemainingSeconds) || 0),
+      });
+      if (finished) await notifyParty(partyId, "game_finished", {
+        gameId: party.game_id,
+        result: chess.isCheckmate() ? (color === "white" ? "white_win" : "black_win") : "draw",
+        termination: chess.isCheckmate() ? "checkmate" : chess.isStalemate() ? "stalemate" : "draw",
+        fen: chess.fen()
       });
       return json({
         move: { from, to, san: result.san, fen: chess.fen(), ply, color },
