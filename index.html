@@ -669,12 +669,12 @@ body.in-game .app{display:grid}
   clearTimeout(feedbackTimer);feedbackTimer=setTimeout(()=>box.classList.remove('visible'),4200);
  }
  function liveBookMove(sans,i){return isBook(sans,i);}
- async function classifyLiveMove(beforeFen,afterFen,move,ply){
-  const history=game.history({verbose:true}),sans=history.map(m=>m.san),side=beforeFen.split(' ')[1],sign=side==='w'?1:-1;
-  if(game.in_checkmate()){return 'mate';}if(game.in_draw()){return 'draw';}
+ async function classifyLiveMove(beforeFen,afterFen,move,ply,sans){
+  const side=beforeFen.split(' ')[1],sign=side==='w'?1:-1,positionAfter=new Chess(afterFen);
+  if(positionAfter.in_checkmate()){return 'mate';}if(positionAfter.in_draw()){return 'draw';}
   if(liveBookMove(sans,ply-1))return 'book';
   await initReviewEngine();
-  const [before,after]=await Promise.all([stockfishEval(beforeFen),stockfishEval(afterFen)]);
+  const before=await stockfishEval(beforeFen);const after=await stockfishEval(afterFen);
   const expected=cp=>1/(1+Math.pow(10,-Math.max(-4000,Math.min(4000,cp))/400));
   const loss=Math.max(0,expected(before.cp*sign)-expected(after.cp*sign));
   const legalCount=new Chess(beforeFen).moves().length;
@@ -693,7 +693,7 @@ body.in-game .app{display:grid}
  }
  function queueLiveMoveAnalysis(beforeFen,afterFen,move,ply){
   liveAnalysisQueue=liveAnalysisQueue.then(async()=>{
-   try{const cls=await classifyLiveMove(beforeFen,afterFen,move,ply);moveGrades[ply]=cls;showMoveFeedback(cls,ply,move.san);renderMoves();
+   try{const historySnapshot=new Chess(afterFen).history();const cls=await classifyLiveMove(beforeFen,afterFen,move,ply,historySnapshot);moveGrades[ply]=cls;showMoveFeedback(cls,ply,move.san);renderMoves();
     const gid=onlineGameId||savedGameId;if(user&&gid){const {error}=await supabase.from('game_move_analysis').upsert({game_id:gid,ply,classification:cls,created_by:user.id},{onConflict:'game_id,ply'});if(error)console.warn('Não foi possível salvar classificação:',error.message);}
    }catch(e){console.warn('Análise do lance indisponível:',e);showMoveFeedback('good',ply,move.san);}
   }).catch(e=>console.warn('Fila de análise:',e));return liveAnalysisQueue;
