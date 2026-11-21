@@ -26,6 +26,16 @@ button{ -webkit-tap-highlight-color:transparent }
 .player-meta{display:flex;align-items:center;gap:7px;min-width:0}
 .rating{font-weight:400;color:#c7c6c2;font-size:12px}
 .clock{margin-left:auto;min-width:140px;padding:6px 14px;background:#242321;border-radius:3px;color:#e6e6e6;font-size:25px;font-weight:700;text-align:center;font-variant-numeric:tabular-nums}
+
+.board-wrap{position:relative}
+.move-feedback{position:absolute;z-index:20;top:12px;right:12px;display:flex;align-items:center;gap:10px;max-width:min(320px,85%);padding:10px 15px 10px 11px;border-radius:13px;background:#252321f2;border:1px solid #ffffff28;box-shadow:0 8px 28px #0008;backdrop-filter:blur(8px);color:#fff;opacity:0;transform:translateY(-8px) scale(.96);pointer-events:none;transition:opacity .18s ease,transform .18s ease}
+.move-feedback.visible{opacity:1;transform:translateY(0) scale(1)}
+.move-feedback .feedback-symbol{width:42px;height:42px;flex:0 0 42px;border-radius:50%;display:grid;place-items:center;background:var(--feedback-color,#8ebd4d);color:#fff;font-size:25px;font-weight:950;text-shadow:0 2px 2px #0005;box-shadow:inset 0 -3px 0 #0002}
+.move-feedback .feedback-copy{min-width:0;display:flex;flex-direction:column;gap:2px}
+.move-feedback .feedback-title{font-size:14px;font-weight:850;white-space:nowrap}
+.move-feedback .feedback-detail{font-size:11px;color:#d1ccc5;line-height:1.25}
+.move-feedback.class-brilliant{--feedback-color:#ad5b92}.move-feedback.class-great,.move-feedback.class-best,.move-feedback.class-excellent{--feedback-color:#8ebd4d}.move-feedback.class-good{--feedback-color:#729c55}.move-feedback.class-interesting{--feedback-color:#8e88bd}.move-feedback.class-inaccuracy{--feedback-color:#d9ad37}.move-feedback.class-mistake,.move-feedback.class-blunder,.move-feedback.class-miss{--feedback-color:#d84d45}.move-feedback.class-book{--feedback-color:#a78b69}.move-feedback.class-mate{--feedback-color:#292725}.move-feedback.class-draw{--feedback-color:#eee;color:#222}.move-feedback.class-draw .feedback-detail{color:#555}
+@media(max-width:650px){.move-feedback{top:6px;right:6px;padding:7px 10px 7px 7px;gap:7px}.move-feedback .feedback-symbol{width:34px;height:34px;flex-basis:34px;font-size:21px}.move-feedback .feedback-title{font-size:12px}.move-feedback .feedback-detail{font-size:10px}}
 .board-wrap{width:100%;max-width:min(100%,calc(100vh - 132px));aspect-ratio:1;margin:0 auto;position:relative;box-shadow:0 2px 8px #0003}
 .board{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));grid-template-rows:repeat(8,minmax(0,1fr));width:100%;height:100%;overflow:hidden;border-radius:3px}
 .square{border:0;padding:0;margin:0;min-width:0;min-height:0;position:relative;display:grid;place-items:center;cursor:pointer;user-select:none;touch-action:manipulation}
@@ -229,7 +239,7 @@ body.in-game .app{display:grid}
       <div class="avatar">♟</div><div class="player-meta"><span>Adversário</span><span class="rating" id="top-rating"></span></div>
       <div class="clock" id="black-clock">10:00</div>
     </div>
-    <div class="board-wrap"><div class="board" id="board" aria-label="Tabuleiro de xadrez"></div></div>
+    <div class="board-wrap"><div class="board" id="board" aria-label="Tabuleiro de xadrez"></div><div class="move-feedback" id="move-feedback" role="status" aria-live="polite"><span class="feedback-symbol" id="feedback-symbol">✓</span><span class="feedback-copy"><b class="feedback-title" id="feedback-title">Melhor jogada!</b><span class="feedback-detail" id="feedback-detail">Stockfish · análise instantânea</span></span></div></div>
     <div class="playerbar bottom">
       <div class="avatar">♙</div><div class="player-meta"><span>mmp7065v2</span><span class="rating">(800) 🇧🇷</span></div>
       <div class="clock" id="white-clock">10:00</div>
@@ -299,7 +309,7 @@ body.in-game .app{display:grid}
  boardEl.addEventListener('click',e=>{const square=e.target.closest('[data-square]')?.dataset.square;if(square)clickSquare(square);});
  const glyph={wk:'♔',wq:'♕',wr:'♖',wb:'♗',wn:'♘',wp:'♙',bk:'♚',bq:'♛',br:'♜',bb:'♝',bn:'♞',bp:'♟︎'};
  const supabase=window.supabase.createClient('https://vjpuosimrigajgikapsu.supabase.co','sb_publishable_gzBQNqRvBm8OCjXSU-BQMQ_zoaCgs9t');
- let user=null,savedGameId=null,saveQueue=Promise.resolve(),isBotThinking=false,authMode='login',partyId=null,partyData=null,partyChannel=null,onlineColor=null,onlineGameId=null,onlineBusy=false,pendingRematchRequest=null,moveGrades={};
+ let user=null,savedGameId=null,saveQueue=Promise.resolve(),isBotThinking=false,authMode='login',partyId=null,partyData=null,partyChannel=null,onlineColor=null,onlineGameId=null,onlineBusy=false,pendingRematchRequest=null,moveGrades={},lastMoveGrade=null,feedbackTimer=null,liveAnalysisQueue=Promise.resolve();
  let game=null,selected=null,legal=[],illegal=[],flipped=false,started=false,clockTimer=null,whiteTime=600,blackTime=600,clockOn=false,godMode=false,premoveQueue=[],premoveDraft=null;
  const files='abcdefgh';
  const pieceName={p:'peão',n:'cavalo',b:'bispo',r:'torre',q:'dama',k:'rei'};
@@ -407,8 +417,8 @@ body.in-game .app{display:grid}
  }
  async function makeMove(move,fromQueue=false){
  const mode=document.getElementById('game-mode').value;
- if(mode==='online'){if(onlineBusy)return;const previousFen=game.fen(),mover=game.turn()==='w'?'white':'black';if(mover!==onlineColor){setStatus('Aguarde a jogada do adversário.');return;}const result=game.move(move);if(!result)return;selected=null;legal=[];illegal=[];render();if(clockOn)startClock();onlineMove(move,{previousFen,optimisticFen:game.fen(),color:mover});return;}
- const result=game.move(move);if(!result)return;selected=null;legal=[];illegal=[];render();await persistLastMove(result);
+ if(mode==='online'){if(onlineBusy)return;const previousFen=game.fen(),mover=game.turn()==='w'?'white':'black';if(mover!==onlineColor){setStatus('Aguarde a jogada do adversário.');return;}const result=game.move(move);if(!result)return;selected=null;legal=[];illegal=[];render();queueLiveMoveAnalysis(previousFen,game.fen(),result,game.history({verbose:true}).length);if(clockOn)startClock();onlineMove(move,{previousFen,optimisticFen:game.fen(),color:mover});return;}
+ const previousFen=game.fen();const result=game.move(move);if(!result)return;selected=null;legal=[];illegal=[];render();queueLiveMoveAnalysis(previousFen,game.fen(),result,game.history({verbose:true}).length);await persistLastMove(result);
  if(game.game_over()){await finishSavedGame();showResultModal();return;}if(clockOn)startClock();
  if(mode==='computer'&&game.turn()==='b')setTimeout(botMove,180);else if(premoveQueue.length)setTimeout(consumePremoveQueue,0);
  }
@@ -633,7 +643,9 @@ body.in-game .app{display:grid}
  async function launchPartyGame(state){if(!state?.game||state.party.status!=='in_game')return;if(onlineGameId===state.game.id&&document.body.classList.contains('in-game'))return;const seat=state.members.find(m=>m.user_id===user.id);if(!seat?.assigned_color)return;onlineGameId=state.game.id;onlineColor=seat.assigned_color;partyId=state.party.id;partyData=state;document.getElementById('game-mode').value='online';document.getElementById('time-control').value=String(state.game.time_control_seconds||0);showGame();init();game=new Chess(state.game.final_fen||state.game.initial_fen);started=true;clockOn=Number(state.game.time_control_seconds)>0;whiteTime=blackTime=Number(state.game.time_control_seconds)||0;flipped=onlineColor==='black';document.querySelector('.game-area').classList.add('online-opponent');document.querySelector('.playerbar.top .player-meta span').textContent=(state.members.find(m=>m.assigned_color!==onlineColor)?.profile?.display_name)||'Adversário';document.querySelector('.playerbar.bottom .player-meta span').textContent=user.user_metadata?.display_name||user.email||'Você';document.getElementById('cloud-status').textContent='☁ Festa online · '+state.party.code;document.body.classList.add('playing','party-game');render();updateClocks();setStatus(game.turn()===(onlineColor==='white'?'w':'b')?'Sua vez!':'Aguardando o adversário…');if(clockOn)startClock();}
  function applyRealtimeMove(notice){
  if(!notice?.fen||!document.body.classList.contains('in-game'))return;
- if(game.fen()!==notice.fen){let ok=false;try{const m=game.move({from:notice.from,to:notice.to,promotion:notice.promotion||'q'});ok=!!m&&game.fen()===notice.fen;}catch{}if(!ok)game=new Chess(notice.fen);}
+ const previousFen=game.fen();let appliedMove=null;
+ if(game.fen()!==notice.fen){let ok=false;try{appliedMove=game.move({from:notice.from,to:notice.to,promotion:notice.promotion||'q'});ok=!!appliedMove&&game.fen()===notice.fen;}catch{}if(!ok){game=new Chess(notice.fen);appliedMove=null;}}
+ if(appliedMove)queueLiveMoveAnalysis(previousFen,game.fen(),appliedMove,game.history({verbose:true}).length);
  render();if(notice.color==='white'&&clockOn)whiteTime=Math.max(0,Number(notice.clockRemainingSeconds)||whiteTime);if(notice.color==='black'&&clockOn)blackTime=Math.max(0,Number(notice.clockRemainingSeconds)||blackTime);
  if(notice.status==='finished'||game.game_over()){started=false;clearInterval(clockTimer);premoveQueue=[];premoveDraft=null;render();showResultModal(notice.result,notice.termination);return;}
  setStatus(game.turn()===(onlineColor==='white'?'w':'b')?'Sua vez!':'Vez do adversário.');if(clockOn)startClock();if(game.turn()===(onlineColor==='white'?'w':'b')&&premoveQueue.length)setTimeout(consumePremoveQueue,0);
@@ -649,6 +661,43 @@ body.in-game .app{display:grid}
  async function exitFinishedGame(){if(document.getElementById('game-mode').value==='online'&&partyId){document.getElementById('result-foot').textContent='Saindo da festa…';try{await partyRequest('exit_finished');}catch(e){document.getElementById('result-foot').textContent=e.message;return;}if(partyChannel){await supabase.removeChannel(partyChannel);partyChannel=null;}partyId=null;partyData=null;onlineGameId=null;onlineColor=null;closeResult();document.getElementById('back-dashboard').click();return;}closeResult();document.getElementById('back-dashboard').click();}
  function initReviewEngine(){if(reviewWorker)return Promise.resolve();if(reviewEngineReady)return reviewEngineReady;reviewEngineReady=new Promise((resolve,reject)=>{try{const engineBase='https://cdn.jsdelivr.net/npm/stockfish@19.0.1/bin/';const bootstrap='self.Module={locateFile:(path)=>'+JSON.stringify(engineBase)+'+path};importScripts('+JSON.stringify(engineBase+'stockfish-19-lite-single.js')+');';const blobUrl=URL.createObjectURL(new Blob([bootstrap],{type:'text/javascript'}));reviewWorker=new Worker(blobUrl);const ready=e=>{const l=String(e.data||'');if(l==='uciok')reviewWorker.postMessage('isready');if(l==='readyok'){reviewWorker.removeEventListener('message',ready);resolve();}};reviewWorker.addEventListener('message',ready);reviewWorker.postMessage('uci');setTimeout(()=>reject(new Error('O motor demorou para carregar.')),30000);}catch(e){reject(e);}}).catch(e=>{reviewEngineReady=null;if(reviewWorker){reviewWorker.terminate();reviewWorker=null;}throw e;});return reviewEngineReady;}
  function stockfishEval(fen){return new Promise((resolve,reject)=>{let score=0,mate=null,done=false;const listener=e=>{const l=String(e.data||''),cp=l.match(/score cp (-?\d+)/),mt=l.match(/score mate (-?\d+)/);if(cp)score=Number(cp[1]);if(mt)mate=Number(mt[1]);if(l.startsWith('bestmove')){done=true;reviewWorker.removeEventListener('message',listener);const raw=mate===null?score:(mate>0?100000:-100000);resolve({cp:fen.split(' ')[1]==='w'?raw:-raw,mate});}};reviewWorker.addEventListener('message',listener);reviewWorker.postMessage('position fen '+fen);reviewWorker.postMessage('go depth 9');setTimeout(()=>{if(!done){reviewWorker.postMessage('stop');reviewWorker.removeEventListener('message',listener);reject(new Error('Tempo de análise excedido.'));}},18000);});}
+ 
+ const liveMoveLabels={brilliant:['⚡','Brilhante','Sacrifício excepcional'],great:['!','Excelente jogada','Jogada crítica'],best:['✓','Melhor jogada','A melhor escolha do motor'],excellent:['⭐','Excelente alternativa','Muito próxima da melhor'],good:['👍','Boa jogada','Lance sólido'],interesting:['!?','Interessante','Ideia inesperada'],inaccuracy:['?!','Imprecisão','Havia uma opção melhor'],mistake:['?','Erro','Você perdeu parte da vantagem'],blunder:['??','Erro grave','Grande perda de avaliação'],miss:['✕','Chance perdida','Uma oportunidade não foi aproveitada'],book:['📖','Abertura teórica','Jogada conhecida da teoria'],mate:['#','Xeque-mate','A partida terminou'],draw:['½','Empate','Meio ponto para cada jogador']};
+ function showMoveFeedback(cls,ply,san){
+  const data=liveMoveLabels[cls]||liveMoveLabels.good,box=document.getElementById('move-feedback');if(!box)return;
+  box.className='move-feedback visible class-'+cls;document.getElementById('feedback-symbol').textContent=data[0];document.getElementById('feedback-title').textContent=data[1];document.getElementById('feedback-detail').textContent='Lance '+Math.ceil(ply/2)+(ply%2?'. Brancas':'… Pretas')+' · '+san+' · '+data[2];
+  clearTimeout(feedbackTimer);feedbackTimer=setTimeout(()=>box.classList.remove('visible'),4200);
+ }
+ function liveBookMove(sans,i){return isBook(sans,i);}
+ async function classifyLiveMove(beforeFen,afterFen,move,ply){
+  const history=game.history({verbose:true}),sans=history.map(m=>m.san),side=beforeFen.split(' ')[1],sign=side==='w'?1:-1;
+  if(game.in_checkmate()){return 'mate';}if(game.in_draw()){return 'draw';}
+  if(liveBookMove(sans,ply-1))return 'book';
+  await initReviewEngine();
+  const [before,after]=await Promise.all([stockfishEval(beforeFen),stockfishEval(afterFen)]);
+  const expected=cp=>1/(1+Math.pow(10,-Math.max(-4000,Math.min(4000,cp))/400));
+  const loss=Math.max(0,expected(before.cp*sign)-expected(after.cp*sign));
+  const legalCount=new Chess(beforeFen).moves().length;
+  const isCapture=!!move.captured,wasSacrifice=isCapture&&move.piece!=='p'&&loss<=.025&&Math.abs(before.cp)<550;
+  let cls='blunder';
+  if(wasSacrifice)cls='brilliant';
+  else if(legalCount<=2&&loss<=.02)cls='great';
+  else if(loss<=.005)cls='best';
+  else if(loss<=.02)cls='excellent';
+  else if(loss<=.05)cls='good';
+  else if((move.san.includes('+')||isCapture)&&loss<=.07)cls='interesting';
+  else if(loss<=.10)cls='inaccuracy';
+  else if(loss<=.20)cls='mistake';
+  if(lastMoveGrade==='blunder'&&!['brilliant','great','best'].includes(cls)&&loss>.02)cls='miss';
+  lastMoveGrade=cls;return cls;
+ }
+ function queueLiveMoveAnalysis(beforeFen,afterFen,move,ply){
+  liveAnalysisQueue=liveAnalysisQueue.then(async()=>{
+   try{const cls=await classifyLiveMove(beforeFen,afterFen,move,ply);moveGrades[ply]=cls;showMoveFeedback(cls,ply,move.san);renderMoves();
+    const gid=onlineGameId||savedGameId;if(user&&gid){const {error}=await supabase.from('game_move_analysis').upsert({game_id:gid,ply,classification:cls,created_by:user.id},{onConflict:'game_id,ply'});if(error)console.warn('Não foi possível salvar classificação:',error.message);}
+   }catch(e){console.warn('Análise do lance indisponível:',e);showMoveFeedback('good',ply,move.san);}
+  }).catch(e=>console.warn('Fila de análise:',e));return liveAnalysisQueue;
+ }
  function isBook(sans,i){const lines=[['e4','e5','Nf3','Nc6','Bb5'],['e4','e5','Nf3','Nc6','Bc4'],['e4','c5'],['e4','e6'],['e4','c6'],['d4','d5','c4'],['d4','Nf6'],['c4','e5'],['Nf3','d5']];return lines.some(l=>i<l.length&&l.slice(0,i+1).every((x,j)=>sans[j]===x));}
  async function runGameReview(){const modal=document.getElementById('review-modal'),list=document.getElementById('review-list'),progress=document.getElementById('review-progress');modal.classList.add('show');list.innerHTML='';progress.textContent='Preparando posições…';try{await loadCompletedGameHistory();}catch(e){progress.textContent='Não foi possível carregar o histórico: '+e.message;return;}if(!game||!game.history().length){progress.textContent='Não há lances salvos para analisar nesta partida.';return;}if(reviewRunning)return;reviewRunning=true;try{await initReviewEngine();const replay=new Chess(),hist=game.history({verbose:true}),sans=hist.map(m=>m.san),rows=[];for(let i=0;i<hist.length;i++){const m=hist[i],bf=replay.fen(),side=replay.turn(),before=await stockfishEval(bf);replay.move(m);const after=await stockfishEval(replay.fen()),sign=side==='w'?1:-1,beforePerspective=before.cp*sign,afterPerspective=after.cp*sign,expected=cp=>1/(1+Math.pow(10,-Math.max(-4000,Math.min(4000,cp))/400)),loss=Math.max(0,expected(beforePerspective)-expected(afterPerspective));let cls='blunder';const next=hist[i+1],sacrifice=!!next&&next.to===m.to&&next.captured===m.piece;let legalCount=0;try{legalCount=new Chess(bf).moves().length;}catch{}if(i===hist.length-1&&game.in_checkmate())cls='mate';else if(isBook(sans,i))cls='book';else if(sacrifice&&loss<=.02&&beforePerspective<500)cls='brilliant';else if(legalCount<=2&&loss<=.02)cls='great';else if(loss<=.005)cls='best';else if(loss<=.02)cls='excellent';else if(loss<=.05)cls='good';else if(m.san.includes('+')&&loss<=.07)cls='interesting';else if(loss<=.10)cls='inaccuracy';else if(loss<=.20)cls='mistake';if(i>0&&rows[i-1].cls==='blunder'&&!['brilliant','great','best'].includes(cls)&&loss>.02)cls='miss';if(cls==='good'&&m.san.includes('x')&&loss<.045)cls='interesting';rows.push({ply:i+1,san:m.san,cls,loss,before:before.cp,after:after.cp});progress.textContent='Analisando '+(i+1)+' de '+hist.length+' lances · Stockfish 19 Lite';list.innerHTML=rows.map(r=>'<div class="review-row"><span>'+(r.ply%2?Math.ceil(r.ply/2)+'.':'')+'</span><span class="review-san">'+r.san+'</span><span class="review-label class-'+r.cls+'">'+moveClasses[r.cls][0]+' '+moveClasses[r.cls][1]+'</span><span class="review-note">Δ '+(r.loss/100).toFixed(2)+' peões · '+moveClasses[r.cls][1]+'</span></div>').join('');}const counts={best:0,excellent:0,mistake:0,blunder:0,brilliant:0,great:0};rows.forEach(r=>{if(counts[r.cls]!==undefined)counts[r.cls]++;});moveGrades={};rows.forEach(r=>moveGrades[r.ply]=r.cls);renderMoves();document.getElementById('review-summary').innerHTML='<div class="review-stat"><b>'+counts.brilliant+'</b><span>BRILHANTES</span></div><div class="review-stat"><b>'+counts.great+'</b><span>EXCELENTES</span></div><div class="review-stat"><b>'+counts.best+'</b><span>MELHORES</span></div><div class="review-stat"><b>'+(counts.mistake+counts.blunder)+'</b><span>ERROS</span></div>';document.getElementById('result-summary').innerHTML='<div class="review-stat"><b>'+hist.length+'</b><span>LANCES</span></div><div class="review-stat"><b>'+(counts.best+counts.excellent+counts.great+counts.brilliant)+'</b><span>BOAS JOGADAS</span></div><div class="review-stat"><b>'+(counts.mistake+counts.blunder+counts.inaccuracy+counts.miss)+'</b><span>ERROS</span></div>';progress.textContent='Análise concluída com Stockfish 19 Lite. As classificações são estimativas do Chess Arena, não uma reprodução oficial do Chess.com.';const gid=resultGameId||onlineGameId||savedGameId;if(user&&gid){const data=rows.map(r=>({game_id:gid,ply:r.ply,classification:r.cls,eval_before_cp:r.before,eval_after_cp:r.after,created_by:user.id}));const {error}=await supabase.from('game_move_analysis').upsert(data,{onConflict:'game_id,ply'});if(error)console.warn(error.message);}}catch(e){progress.textContent='Não foi possível analisar: '+e.message;}finally{reviewRunning=false;}}
  function showGame(){document.body.classList.add('in-game');if(document.getElementById('game-mode').value==='online'&&partyId)document.body.classList.add('party-game');else document.body.classList.remove('party-game');document.querySelectorAll('.site-shell').forEach(x=>x.hidden=true);document.getElementById('game-app').style.display='grid';}
