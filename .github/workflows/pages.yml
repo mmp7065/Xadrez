@@ -4,7 +4,9 @@ on:
     branches: [main]
   workflow_dispatch:
 permissions:
-  contents: write
+  contents: read
+  pages: write
+  id-token: write
 concurrency:
   group: pages
   cancel-in-progress: true
@@ -29,14 +31,10 @@ jobs:
           cp /tmp/stockfish-package/package/bin/stockfish-19-lite-single.js engine/
           cp /tmp/stockfish-package/package/bin/stockfish-19-lite-single.wasm engine/
           cp /tmp/stockfish-package/package/Copying.txt engine/
-      - name: Publish Stockfish assets to the Pages source branch
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add engine/stockfish-19-lite-single.js engine/stockfish-19-lite-single.wasm engine/Copying.txt
-          if git diff --cached --quiet; then
-            echo "Stockfish assets already up to date."
-          else
-            git commit -m "Publish self-hosted Stockfish engine assets"
-            git push origin HEAD:main
-          fi
+      - name: Upload site artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
