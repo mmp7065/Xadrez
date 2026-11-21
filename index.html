@@ -846,12 +846,11 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
  
  const liveMoveLabels={brilliant:['⚡','Brilhante','Sacrifício excepcional'],great:['!','Excelente jogada','Jogada crítica'],best:['✓','Melhor jogada','A melhor escolha do motor'],excellent:['⭐','Excelente alternativa','Muito próxima da melhor'],good:['👍','Boa jogada','Lance sólido'],interesting:['!?','Interessante','Ideia inesperada'],inaccuracy:['?!','Imprecisão','Havia uma opção melhor'],mistake:['?','Erro','Você perdeu parte da vantagem'],blunder:['??','Erro grave','Grande perda de avaliação'],miss:['✕','Chance perdida','Uma oportunidade não foi aproveitada'],book:['📖','Abertura teórica','Jogada conhecida da teoria'],mate:['#','Xeque-mate','A partida terminou'],draw:['½','Empate','Meio ponto para cada jogador']};
  function livePieceGradePositions(history){
-  const positions={},replay=new Chess();
-  history.forEach((move,index)=>{
-   const carried=positions[move.from];delete positions[move.from];delete positions[move.to];
-   const grade=moveGrades[index+1];if(grade)positions[move.to]=grade;else if(carried)positions[move.to]=carried;
-   try{replay.move(move);}catch{}
-  });
+  const positions={};
+  if(!history.length)return positions;
+  const lastPly=history.length,lastMove=history[lastPly-1],grade=moveGrades[lastPly];
+  // Show only the classification of the latest move; never carry badges with pieces.
+  if(grade&&lastMove?.to)positions[lastMove.to]=grade;
   return positions;
  }
  function showMoveFeedback(cls,ply,san){render();}
@@ -874,7 +873,7 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
   else if(legalCount<=2&&loss<=.02)cls='great';
   else if(loss<=.02)cls='excellent';
   else if(loss<=.05)cls='good';
-  else if((move.san.includes('+')||isCapture)&&loss<=.07)cls='interesting';
+  else if((move.san.includes('+')||!!move.captured)&&loss<=.07)cls='interesting';
   else if(loss<=.10)cls='inaccuracy';
   else if(loss<=.20)cls='mistake';
   if(lastMoveGrade==='blunder'&&!['brilliant','great','best'].includes(cls)&&loss>.02)cls='miss';
