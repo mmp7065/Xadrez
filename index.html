@@ -682,7 +682,7 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
     .on('broadcast',{event:'party_event'},async(payload)=>{
      const notice=payload?.payload||{};
      try{
-      if(notice.event==='move_classified'&&notice.gameId===onlineGameId&&Number.isInteger(Number(notice.ply))&&notice.classification){moveGrades[Number(notice.ply)]=notice.classification;render();renderMoves();return;}
+      if(notice.event==='move_classified'&&notice.gameId===onlineGameId&&Number.isInteger(Number(notice.ply))&&notice.classification){moveGrades[Number(notice.ply)]=notice.classification;render();renderMoves();refreshResultSummaryFromGrades();return;}
       if(notice.event==='move_committed'&&notice.fen&&document.body.classList.contains('in-game')){applyRealtimeMove(notice);return;}
       if(notice.event==='rematch_requested'&&notice.requestedBy!==user.id){pendingRematchRequest=notice.requestId||null;document.getElementById('rematch-notice-text').textContent='Seu adversário quer jogar mais uma partida com você. Deseja aceitar?';document.getElementById('rematch-notice-status').textContent='';document.getElementById('rematch-notice-modal').classList.add('show');return;}if(notice.event==='rematch_declined'&&notice.requestedBy===user.id){const b=document.getElementById('result-rematch');b.disabled=false;b.textContent='🤝 Pedir revanche novamente';document.getElementById('result-foot').textContent='Seu adversário recusou a revanche.';return;}
       const state=await partyRequest('state',{partyId:id});renderParty(state);
@@ -715,16 +715,34 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
  if(notice.status==='finished'||game.game_over()){started=false;clearInterval(clockTimer);premoveQueue=[];premoveDraft=null;render();showResultModal(notice.result,notice.termination);return;}
  setStatus(game.turn()===(onlineColor==='white'?'w':'b')?'Sua vez!':'Vez do adversário.');if(clockOn)startClock();if(game.turn()===(onlineColor==='white'?'w':'b')&&premoveQueue.length)setTimeout(consumePremoveQueue,0);
  }
- async function syncOnlineGame(){if(!partyId)return;try{const state=await partyRequest('state');if(!state.game)return;partyData=state;const fen=state.game.final_fen||state.game.initial_fen;if(game.fen()!==fen){game=new Chess(fen);render();setStatus(game.turn()===(onlineColor==='white'?'w':'b')?'Sua vez.':'Aguardando o adversário…');if(clockOn)startClock();}if(state.game.status==='completed'){started=false;clearInterval(clockTimer);showResultModal(state.game.result,state.game.termination);return;}if(game.turn()===(onlineColor==='white'?'w':'b')&&premoveQueue.length)await consumePremoveQueue();}catch(e){setStatus('Falha ao sincronizar: '+e.message,'check');}}
+ async function syncOnlineGame(){if(!partyId)return;try{const state=await partyRequest('state');if(!state.game)return;partyData=state;const fen=state.game.final_fen||state.game.initial_fen;if(game.fen()!==fen){try{const rebuilt=await rebuildOnlineGameHistory(fen);if(!rebuilt)game=new Chess(fen);}catch(e){console.warn('Não foi possível reconstruir o histórico online:',e);game=new Chess(fen);}render();renderMoves();setStatus(game.turn()===(onlineColor==='white'?'w':'b')?'Sua vez.':'Aguardando o adversário…');if(clockOn)startClock();}if(state.game.status==='completed'){started=false;clearInterval(clockTimer);showResultModal(state.game.result,state.game.termination);return;}if(game.turn()===(onlineColor==='white'?'w':'b')&&premoveQueue.length)await consumePremoveQueue();}catch(e){setStatus('Falha ao sincronizar: '+e.message,'check');}}
  async function onlineMove(move,optimistic){if(onlineBusy)return;onlineBusy=true;try{const color=optimistic?.color||onlineColor,{data,error}=await supabase.functions.invoke('chess-party',{body:{action:'move',partyId,from:move.from,to:move.to,promotion:move.promotion||'q',clockRemainingSeconds:color==='white'?whiteTime:blackTime}});if(error)throw new Error(data?.error||error.message);if(data?.error)throw new Error(data.error);if(data.move?.fen&&optimistic&&game.fen()===optimistic.previousFen){game=new Chess(data.move.fen);render();}if(data.game?.status==='completed'){started=false;clearInterval(clockTimer);showResultModal(data.game.result,data.game.termination);}else if(optimistic&&game.fen()===optimistic.optimisticFen)setStatus('Lance confirmado.');}catch(e){setStatus('Não foi possível confirmar o lance. Sincronizando…','check');if(optimistic&&game.fen()===optimistic.optimisticFen){game=new Chess(optimistic.previousFen);render();}await syncOnlineGame();}finally{onlineBusy=false;}}
  
  let resultGameId=null,reviewWorker=null,reviewEngineReady=null,reviewRunning=false,engineEvalQueue=Promise.resolve();
  const moveClasses={brilliant:['!!','Brilhante'],great:['!','Excelente jogada'],best:['✓','Melhor jogada'],excellent:['⭐','Excelente alternativa'],good:['','Boa'],interesting:['!?','Interessante'],inaccuracy:['?!','Imprecisão'],mistake:['?','Erro'],blunder:['??','Erro grave'],miss:['✕','Chance perdida'],book:['📖','Abertura teórica'],mate:['#','Xeque-mate']};
- async function loadCompletedGameHistory(){const gid=resultGameId||onlineGameId||savedGameId;if(!gid||!user)return game;const {data,error}=await supabase.from('game_moves').select('ply,san').eq('game_id',gid).order('ply',{ascending:true});if(error)throw error;const replay=new Chess();for(const row of (data||[])){if(!replay.move(row.san))throw new Error('O histórico contém um lance inválido no lance '+row.ply+'.');}if((data||[]).length)game=replay;return game;} async function showResultModal(result,termination){
+ async function loadCompletedGameHistory(){const gid=resultGameId||onlineGameId||savedGameId;if(!gid||!user)return game;const {data,error}=await supabase.from('game_moves').select('ply,san').eq('game_id',gid).order('ply',{ascending:true});if(error)throw error;const replay=new Chess();for(const row of (data||[])){if(!replay.move(row.san))throw new Error('O histórico contém um lance inválido no lance '+row.ply+'.');}if((data||[]).length)game=replay;return game;} function refreshResultSummaryFromGrades(){
+  const box=document.getElementById('result-summary');if(!box||!document.getElementById('result-modal').classList.contains('show'))return;
+  const values=Object.values(moveGrades),good=values.filter(x=>['brilliant','great','best','excellent','good'].includes(x)).length,errors=values.filter(x=>['inaccuracy','mistake','blunder','miss'].includes(x)).length;
+  box.innerHTML='<div class="review-stat"><b>'+game.history().length+'</b><span>LANCES</span></div><div class="review-stat"><b>'+good+'</b><span>BOAS JOGADAS</span></div><div class="review-stat"><b>'+errors+'</b><span>IMPRECISÕES / ERROS</span></div>';
+ }
+ async function rebuildOnlineGameHistory(expectedFen){
+  if(!onlineGameId||!user)return false;
+  const {data,error}=await supabase.from('game_moves').select('ply,san').eq('game_id',onlineGameId).order('ply',{ascending:true});
+  if(error)throw error;
+  const replay=new Chess();
+  for(const row of (data||[])){if(!replay.move(row.san))throw new Error('Lance online inválido no histórico: '+row.ply);}
+  if(replay.fen()!==expectedFen)return false;
+  game=replay;
+  const {data:grades,error:gradeError}=await supabase.from('game_move_analysis').select('ply,classification').eq('game_id',onlineGameId).order('ply',{ascending:true});
+  if(!gradeError){moveGrades={};(grades||[]).forEach(x=>moveGrades[x.ply]=x.classification);}
+  return true;
+ }
+ async function showResultModal(result,termination){
   if(!game)return;
   resultGameId=onlineGameId||savedGameId;
   try{await loadCompletedGameHistory();}catch(e){console.warn('Não foi possível reconstruir o histórico:',e);}
   const gid=resultGameId||onlineGameId||savedGameId;
+  try{await liveAnalysisQueue;}catch{}
   let analyses=[];
   if(user&&gid){
    try{const {data,error}=await supabase.from('game_move_analysis').select('ply,classification').eq('game_id',gid).order('ply',{ascending:true});if(error)throw error;analyses=data||[];moveGrades={};analyses.forEach(x=>moveGrades[x.ply]=x.classification);render();renderMoves();}
