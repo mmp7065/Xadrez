@@ -50,3 +50,12 @@ Qualquer push para main aciona o workflow de GitHub Pages.
 3. Copie o código de seis caracteres e envie ao outro jogador.
 4. Na segunda conta, abra **Festas**, digite o código e entre.
 5. O anfitrião inicia; cada jogador move somente as peças da sua cor.
+
+
+## Configurações e sincronização ao vivo das festas
+- O anfitrião pode alterar o tempo e sua preferência de cor depois de criar a festa, enquanto a sala ainda aguarda o início.
+- O convidado pode alterar sua preferência de cor no próprio lobby.
+- Ao iniciar a partida, as configurações ficam bloqueadas para preservar a integridade do relógio e das cores.
+- A Edge Function valida cada lance, grava o movimento e envia um evento Broadcast privado para a sala.
+- Os dois navegadores recebem eventos Realtime; o oponente atualiza o tabuleiro automaticamente sem recarregar a página.
+- A conexão com o canal Realtime é aguardada antes de considerar o lobby conectado.
