@@ -488,6 +488,22 @@ body.in-game #game-app .player-info-stack .clock{min-width:66px;margin-left:auto
  body.in-game #game-app .square .piece{font-size:clamp(34px,5.8vmin,78px)!important}
 }
 @media(min-width:901px) and (max-width:1200px){body.in-game #game-app .game-area{grid-template-columns:230px minmax(0,1fr) 230px!important;column-gap:12px!important}body.in-game #game-app .arena-info.left,body.in-game #game-app .god-tools,body.in-game #game-app .arena-info.right{padding:11px!important}}
+
+/* Reserve a compact bottom slot for the separate player cards; keep every other area unchanged. */
+@media(min-width:901px){
+ body.in-game #game-app .game-area{
+  grid-template-rows:minmax(0,1fr) 142px!important;
+ }
+ body.in-game #game-app .arena-info.left{
+  grid-row:1!important;min-height:0!important;height:100%!important;max-height:100%!important;
+  overflow-y:auto!important;align-self:stretch!important;
+ }
+ body.in-game #game-app .player-info-stack{
+  grid-row:2!important;min-height:0!important;height:142px!important;max-height:142px!important;
+  align-self:stretch!important;overflow:hidden!important;
+ }
+}
+
 </style>
 </head>
 <body>
