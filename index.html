@@ -67,7 +67,7 @@ button{ -webkit-tap-highlight-color:transparent }
 .god-tools{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;padding:10px;background:#302e2b;border-radius:8px}
 .god-tools label{font-size:11px;color:#bbb;display:flex;flex-direction:column;gap:5px}
 .god-tools select{height:36px;padding:0 8px;font-size:13px;border-radius:6px}
-.god-toggle{grid-column:1/-1;height:40px;border:1px solid #8d6bd1;background:#403451;color:#f1e9ff;border-radius:7px;font-weight:700;cursor:pointer}
+.god-tools:before{content:'⚡ CHEAT · FERRAMENTAS DO ANFITRIÃO';grid-column:1/-1;color:#d6b9ff;font-size:12px;font-weight:900;letter-spacing:.08em}.god-toggle{grid-column:1/-1;height:40px;border:1px solid #8d6bd1;background:#403451;color:#f1e9ff;border-radius:7px;font-weight:700;cursor:pointer}
 .god-toggle.active{background:#6c43a5;border-color:#b28be8;box-shadow:0 0 0 2px #b28be855}
 .god-hint{grid-column:1/-1;color:#c6b8dc;font-size:11px;line-height:1.4}
 .status.check{border-left:4px solid #e0a32e;background:#493a25}
@@ -363,7 +363,10 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
         <button class="small" id="reset-btn">↻ Reiniciar</button>
       </div><div class="premove-hint" id="premove-hint" hidden><b>Pré-moves:</b><div class="premove-list" id="premove-list"></div><button class="small" id="cancel-premove">Cancelar todos</button></div>
       <div class="god-tools">
-        <button class="god-toggle" id="god-toggle" type="button">✦ MODO DEUS: DESATIVADO</button>
+        <button class="god-toggle" id="god-toggle" type="button">⚡ CHEAT: DESATIVADO</button>
+        <label>Ação
+          <select id="god-action"><option value="replace">Substituir peça / colocar</option><option value="transform">Trocar função da peça</option></select>
+        </label>
         <label>Cor da peça
           <select id="god-color"><option value="w">Brancas</option><option value="b">Pretas</option></select>
         </label>
@@ -396,6 +399,7 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
 <script>
 (() => {
  const boardEl=document.getElementById('board'), statusEl=document.getElementById('status'), movesEl=document.getElementById('moves');
+ boardEl.addEventListener('contextmenu',event=>{const cell=event.target.closest('[data-square]');if(cell&&premoveQueue.length)cancelPremoveFromContext(event,cell.dataset.square);});
  boardEl.addEventListener('click',e=>{const square=e.target.closest('[data-square]')?.dataset.square;if(square)clickSquare(square);});
  const glyph={wk:'♔',wq:'♕',wr:'♖',wb:'♗',wn:'♘',wp:'♙',bk:'♚',bq:'♛',br:'♜',bb:'♝',bn:'♞',bp:'♟︎'};
  const supabase=window.supabase.createClient('https://vjpuosimrigajgikapsu.supabase.co','sb_publishable_gzBQNqRvBm8OCjXSU-BQMQ_zoaCgs9t');
@@ -483,20 +487,22 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
   const cell=(san,ply)=>san?san+(moveGrades[ply]?' <b class="move-grade class-'+moveGrades[ply]+'">'+symbols[moveGrades[ply]]+'</b>':''):'';
   let out='';for(let i=0;i<h.length;i+=2)out+=`<div class="move-row"><span>${i/2+1}.</span><span>${cell(h[i],i+1)}</span><span>${cell(h[i+1],i+2)}</span></div>`;movesEl.innerHTML=out;
  }
+ function cancelPremoveFromContext(event,square){event.preventDefault();const index=premoveQueue.findIndex(m=>m.from===square||m.to===square);if(index>=0){premoveQueue.splice(index);premoveDraft=null;selected=null;legal=[];illegal=[];render();setStatus('Pré-move selecionado e todos os posteriores dessa sequência foram removidos.');}}
  function renderPremoveQueue(){const box=document.getElementById('premove-list'),hint=document.getElementById('premove-hint');if(!box||!hint)return;box.innerHTML='';premoveQueue.forEach((m,i)=>{const chip=document.createElement('span');chip.className='premove-chip';chip.textContent=(i+1)+'. '+(glyph[(m.color||'w')+(m.pieceType||'q')]||'')+' '+m.from+' → '+m.to;const x=document.createElement('button');x.textContent='×';x.title='Remover este e os seguintes';x.onclick=()=>{premoveQueue.splice(i);render();};chip.append(x);box.append(chip);});hint.hidden=!premoveQueue.length;}
  function projectedPremoveGame(){const mode=document.getElementById('game-mode').value,own=mode==='online'?(onlineColor==='black'?'b':'w'):mode==='computer'?'w':(game.turn()==='w'?'b':'w');const p=game.fen().split(' ');p[1]=own;let v=new Chess(p.join(' '));for(const m of premoveQueue){const x=v.moves({square:m.from,verbose:true}).find(z=>z.to===m.to);if(!x)break;v.move({from:m.from,to:m.to,promotion:m.promotion||'q'});const f=v.fen().split(' ');f[1]=own;v=new Chess(f.join(' '));}return v;}
  function addPremove(from,to){const v=projectedPremoveGame(),m=v.moves({square:from,verbose:true}).find(x=>x.to===to);if(!m){setStatus('Esse pré-move não é possível na sequência planejada.','check');premoveDraft=null;selected=null;render();return;}const moving=v.get(from);premoveQueue.push({from,to,promotion:m.promotion||null,pieceType:moving?.type||'q',color:moving?.color||'w'});premoveDraft=null;selected=null;legal=[];illegal=[];render();setStatus('Pré-move '+premoveQueue.length+' preparado. A sequência continua pendente.');}
- async function consumePremoveQueue(){if(!premoveQueue.length||!started||game.game_over()||onlineBusy)return;const mode=document.getElementById('game-mode').value,own=mode==='online'?(onlineColor==='white'?'w':'b'):mode==='computer'?'w':game.turn();if(game.turn()!==own)return;const next=premoveQueue[0],m=game.moves({square:next.from,verbose:true}).find(x=>x.to===next.to&&(!next.promotion||x.promotion===next.promotion));if(!m){premoveQueue=[];render();setStatus('Sequência de pré-moves cancelada: o primeiro lance deixou de ser legal.');return;}premoveQueue.shift();render();setStatus('Executando pré-move…');await makeMove({from:next.from,to:next.to,promotion:m.promotion||undefined},true);}
+ async function consumePremoveQueue(){if(!premoveQueue.length||game.game_over()||onlineBusy)return;const mode=document.getElementById('game-mode').value,own=mode==='online'?(onlineColor==='white'?'w':'b'):mode==='computer'?'w':game.turn();if(game.turn()!==own)return;const next=premoveQueue[0],m=game.moves({square:next.from,verbose:true}).find(x=>x.to===next.to&&(!next.promotion||x.promotion===next.promotion));if(!m){premoveQueue=[];render();setStatus('Sequência de pré-moves cancelada: o primeiro lance deixou de ser legal.');return;}premoveQueue.shift();render();setStatus('Executando pré-move…');await makeMove({from:next.from,to:next.to,promotion:m.promotion||undefined},true);}
  function clickSquare(sq){
  if(replayMode)return;
- if(!started||game.game_over())return;if(godMode){summonPiece(sq);return;}
+ if(godMode){summonPiece(sq);return;}
  const mode=document.getElementById('game-mode').value,piece=game.get(sq);
+ if(!started||game.game_over()){if(mode!=='online'&&premoveDraft){addPremove(premoveDraft,sq);return;}if(mode!=='online')return;}
  if(mode==='local'){
   if(premoveDraft){addPremove(premoveDraft,sq);return;}
   const v=projectedPremoveGame(),vp=v.get(sq);if(vp&&vp.color!==game.turn()){premoveDraft=sq;selected=sq;legal=v.moves({square:sq,verbose:true});illegal=[];setStatus('Escolha o destino do pré-move. Você pode encadear outros movimentos desta peça.');render();return;}
  }else{
   const myColor=mode==='online'?(onlineColor==='white'?'w':'b'):'w',myTurn=game.turn()===myColor;
-  if(!myTurn){const v=projectedPremoveGame();if(premoveDraft){addPremove(premoveDraft,sq);return;}const vp=v.get(sq);if(vp&&vp.color===myColor){premoveDraft=sq;selected=sq;legal=v.moves({square:sq,verbose:true});illegal=[];setStatus('Escolha o destino do próximo pré-move. Você pode planejar vários movimentos para a mesma peça.');render();return;}setStatus('Aguarde sua vez ou selecione uma peça para preparar um pré-move.');return;}
+  if(!myTurn||(!started&&mode==='online')){const v=projectedPremoveGame();if(premoveDraft){addPremove(premoveDraft,sq);return;}const vp=v.get(sq);if(vp&&vp.color===myColor){premoveDraft=sq;selected=sq;legal=v.moves({square:sq,verbose:true});illegal=[];setStatus('Escolha o destino do próximo pré-move. Você pode planejar vários movimentos para a mesma peça.');render();return;}setStatus('Aguarde sua vez ou selecione uma peça para preparar um pré-move.');return;}
  }
  if(mode==='computer'&&(game.turn()==='b'||isBotThinking))return;
  if(selected&&legal.some(m=>m.to===sq)){const opts=legal.filter(m=>m.to===sq);if(opts.some(m=>m.promotion)){showPromotion(opts);return;}makeMove({from:selected,to:sq});return;}
@@ -662,10 +668,11 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
   ch.subscribe(status=>{if(status==='CHANNEL_ERROR'||status==='TIMED_OUT')console.warn('Site Realtime connection:',status);});
  }
  async function summonPiece(square){
-  const color=document.getElementById('god-color').value,type=document.getElementById('god-piece').value;
+  const action=document.getElementById('god-action')?.value||'replace',existing=game.get(square),color=action==='transform'?(existing?.color||document.getElementById('god-color').value):document.getElementById('god-color').value,type=document.getElementById('god-piece').value;
+  if(action==='transform'&&!existing){setStatus('Para trocar a função, clique numa casa que já tenha uma peça.','check');return;}
   if(document.getElementById('game-mode').value==='online'){
    if(!partyData||partyData.party?.host_user_id!==user?.id){setStatus('Somente o anfitrião pode usar o Modo Deus.','check');return;}
-   try{setStatus('Aplicando alteração do Modo Deus…');const result=await partyRequest('god_edit',{square,color,pieceType:type});game=new Chess(result.fen);selected=null;legal=[];illegal=[];render();setStatus(glyph[color+type]+' '+pieceName[type].toUpperCase()+' colocado em '+square.toUpperCase()+'. Alteração sincronizada para os dois jogadores.');}
+   try{setStatus('Aplicando alteração do Modo Deus…');const result=await partyRequest('god_edit',{square,color,pieceType:type,action});game=new Chess(result.fen);selected=null;legal=[];illegal=[];render();setStatus(glyph[color+type]+' '+pieceName[type].toUpperCase()+' colocado em '+square.toUpperCase()+'. Alteração sincronizada para os dois jogadores.');}
    catch(error){setStatus('Não foi possível alterar a peça: '+error.message,'check');}
    return;
   }
@@ -693,7 +700,7 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
   if(document.getElementById('game-mode').value==='online'&&(!partyData||partyData.party?.host_user_id!==user?.id)){setStatus('Somente o anfitrião pode ativar o Modo Deus.','check');return;}
   godMode=!godMode;selected=null;legal=[];illegal=[];
   const b=document.getElementById('god-toggle');b.classList.toggle('active',godMode);
-  b.textContent=godMode?'✦ MODO DEUS: ATIVADO':'✦ MODO DEUS: DESATIVADO';
+  b.textContent=godMode?'⚡ CHEAT: ATIVADO':'✦ MODO DEUS: DESATIVADO';
   document.getElementById('god-hint').textContent=godMode?'Clique em qualquer casa para invocar a peça escolhida. A peça existente será substituída.':'Ative o Modo Deus e clique em qualquer casa para colocar a peça escolhida. A peça que já estiver na casa será substituída.';
   if(godMode){started=true;document.body.classList.add('playing');setStatus('Modo Deus ativado. Escolha cor e peça e clique em uma casa do tabuleiro.');}
   else setStatus('Modo Deus desativado. As regras normais de xadrez voltaram.');
