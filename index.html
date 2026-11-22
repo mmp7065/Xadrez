@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Xadrez — Chess Arena</title>
-<style>
+<style>.replay-toolbar{width:min(100%,720px);margin:0 auto 12px;padding:12px;background:#252321;border:1px solid #48443e;border-radius:12px;color:#eee}.replay-head,.replay-actions{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}.replay-head span{font-size:12px;color:#bbb}.replay-toolbar input[type=range]{width:100%;margin:12px 0;accent-color:#9dcc70}.replay-actions{justify-content:center}.replay-actions button{min-height:34px}.replay-actions #replay-close{margin-left:auto}
 :root{
   --page:#302e2b;--panel:#262522;--panel-top:#211f1d;--surface:#353330;
   --light:#eeeed2;--dark:#779556;--green:#81b64b;--green-dark:#639b3e;
@@ -60,7 +60,7 @@ button{ -webkit-tap-highlight-color:transparent }
 .light .coord{color:var(--dark)}.dark .coord{color:var(--light)}
 .dot{position:absolute;width:23%;height:23%;border-radius:50%;background:#24451f80;z-index:2;pointer-events:none}
 .capture-mark{position:absolute;inset:4%;border:5px solid #24451f80;border-radius:50%;z-index:2;pointer-events:none}
-.dot.illegal-dot{width:25%;height:25%;background:#d93025d9;box-shadow:0 0 0 2px #fff7}
+.dot.illegal-dot{width:25%;height:25%;background:#d93025d9;box-shadow:0 0 0 2px #fff7}.square .dot.illegal-dot{background:#e32636!important;box-shadow:0 0 0 2px #fff,0 0 10px #e32636!important;opacity:1;width:27%;height:27%;z-index:5}.square .capture-mark.illegal-capture{border:5px solid #e32636!important;box-shadow:inset 0 0 0 2px #fff,0 0 10px #e32636!important;z-index:5}
 .capture-mark.illegal-capture{border-color:#d93025e6;box-shadow:inset 0 0 0 2px #fff6}
 .square.in-check{box-shadow:inset 0 0 0 7px #e53935;z-index:1}
 .square.in-check:before{content:"";position:absolute;inset:0;background:#e539354d;z-index:0;pointer-events:none}
@@ -401,6 +401,7 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
  const supabase=window.supabase.createClient('https://vjpuosimrigajgikapsu.supabase.co','sb_publishable_gzBQNqRvBm8OCjXSU-BQMQ_zoaCgs9t');
  let user=null,savedGameId=null,saveQueue=Promise.resolve(),isBotThinking=false,authMode='login',partyId=null,partyData=null,partyChannel=null,onlineColor=null,onlineGameId=null,onlineBusy=false,pendingRematchRequest=null,moveGrades={},lastMoveGrade=null,feedbackTimer=null,liveAnalysisQueue=Promise.resolve();
  let game=null,selected=null,legal=[],illegal=[],flipped=false,started=false,clockTimer=null,whiteTime=600,blackTime=600,clockOn=false,godMode=false,premoveQueue=[],premoveDraft=null;
+ let replayMode=false,replayBaseFen=null,replaySans=[],replayIndex=0,replayTimer=null;
  const files='abcdefgh';
  const pieceName={p:'peão',n:'cavalo',b:'bispo',r:'torre',q:'dama',k:'rei'};
  function init(){
@@ -487,6 +488,7 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
  function addPremove(from,to){const v=projectedPremoveGame(),m=v.moves({square:from,verbose:true}).find(x=>x.to===to);if(!m){setStatus('Esse pré-move não é possível na sequência planejada.','check');premoveDraft=null;selected=null;render();return;}const moving=v.get(from);premoveQueue.push({from,to,promotion:m.promotion||null,pieceType:moving?.type||'q',color:moving?.color||'w'});premoveDraft=null;selected=null;legal=[];illegal=[];render();setStatus('Pré-move '+premoveQueue.length+' preparado. A sequência continua pendente.');}
  async function consumePremoveQueue(){if(!premoveQueue.length||!started||game.game_over()||onlineBusy)return;const mode=document.getElementById('game-mode').value,own=mode==='online'?(onlineColor==='white'?'w':'b'):mode==='computer'?'w':game.turn();if(game.turn()!==own)return;const next=premoveQueue[0],m=game.moves({square:next.from,verbose:true}).find(x=>x.to===next.to&&(!next.promotion||x.promotion===next.promotion));if(!m){premoveQueue=[];render();setStatus('Sequência de pré-moves cancelada: o primeiro lance deixou de ser legal.');return;}premoveQueue.shift();render();setStatus('Executando pré-move…');await makeMove({from:next.from,to:next.to,promotion:m.promotion||undefined},true);}
  function clickSquare(sq){
+ if(replayMode)return;
  if(!started||game.game_over())return;if(godMode){summonPiece(sq);return;}
  const mode=document.getElementById('game-mode').value,piece=game.get(sq);
  if(mode==='local'){
@@ -564,11 +566,25 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
   list.querySelectorAll('[data-pgn]').forEach(b=>b.onclick=()=>{const pgn=decodeURIComponent(b.dataset.pgn);if(!pgn)return alert('Esta partida ainda não possui lances.');navigator.clipboard?.writeText(pgn);alert('PGN copiado para a área de transferência.');});
   list.querySelectorAll('[data-replay]').forEach(b=>b.onclick=()=>replayGame(b.dataset.replay,decodeURIComponent(b.dataset.fen)));
  }
+ function stopReplay(){if(replayTimer){clearInterval(replayTimer);replayTimer=null;}}
+ function replayRenderAt(index){
+  stopReplay();replayIndex=Math.max(0,Math.min(index,replaySans.length));game=new Chess(replayBaseFen||undefined);
+  for(let i=0;i<replayIndex;i++){if(!game.move(replaySans[i]))break;}
+  selected=null;legal=[];illegal=[];premoveQueue=[];refreshMoves();render();
+  const count=document.getElementById('replay-count');if(count)count.textContent=replayIndex+' / '+replaySans.length+' lances';
+  const range=document.getElementById('replay-range');if(range)range.value=String(replayIndex);
+  const play=document.getElementById('replay-play');if(play)play.textContent=replayIndex>=replaySans.length?'↻ Reproduzir':'▶ Reproduzir';
+  setStatus(replayIndex===0?'Replay · início da partida':replayIndex===replaySans.length?'Replay · fim da partida':'Replay · lance '+replayIndex+' de '+replaySans.length);
+ }
+ function replayPlay(){if(replayIndex>=replaySans.length)replayRenderAt(0);if(replayTimer)return;const btn=document.getElementById('replay-play');if(btn)btn.textContent='Ⅱ Pausar';replayTimer=setInterval(()=>{if(replayIndex>=replaySans.length){stopReplay();return;}replayRenderAt(replayIndex+1);if(replayIndex>=replaySans.length)stopReplay();},1100);}
  async function replayGame(id,fen){
-  const {data,error}=await supabase.from('game_moves').select('san').eq('game_id',id).order('ply',{ascending:true});
+  stopReplay();const {data,error}=await supabase.from('game_moves').select('san').eq('game_id',id).order('ply',{ascending:true});
   if(error){alert('Não foi possível abrir a partida: '+error.message);return;}
-  const replay=new Chess(fen||undefined);for(const m of (data||[])){if(!replay.move(m.san)){alert('O histórico contém um lance inválido e não pode ser reproduzido.');return;}}
-  game=replay;savedGameId=null;started=false;selected=null;legal=[];illegal=[];godMode=false;document.body.classList.add('playing');clearInterval(clockTimer);render();setStatus('Replay carregado: '+(data?.length||0)+' lances. Use Desfazer para percorrer a partida para trás.');document.querySelector('[data-tab="new"]').click();
+  replayBaseFen=fen||null;replaySans=(data||[]).map(m=>m.san).filter(Boolean);replayMode=true;replayIndex=0;savedGameId=null;started=false;selected=null;legal=[];illegal=[];godMode=false;document.body.classList.add('playing');clearInterval(clockTimer);
+  let bar=document.getElementById('replay-toolbar');if(!bar){bar=document.createElement('div');bar.id='replay-toolbar';bar.className='replay-toolbar';document.querySelector('.board-wrap').insertAdjacentElement('beforebegin',bar);}
+  bar.innerHTML='<div class="replay-head"><strong>▶ Assistir partida</strong><span id="replay-count">0 / '+replaySans.length+' lances</span></div><input id="replay-range" type="range" min="0" max="'+replaySans.length+'" value="0" step="1" aria-label="Progresso da partida"><div class="replay-actions"><button class="small" id="replay-start">⏮</button><button class="small" id="replay-prev">◀</button><button class="small" id="replay-play">▶ Reproduzir</button><button class="small" id="replay-next">▶</button><button class="small" id="replay-end">⏭</button><button class="small" id="replay-close">Fechar replay</button></div>';
+  document.getElementById('replay-start').onclick=()=>replayRenderAt(0);document.getElementById('replay-prev').onclick=()=>replayRenderAt(replayIndex-1);document.getElementById('replay-next').onclick=()=>replayRenderAt(replayIndex+1);document.getElementById('replay-end').onclick=()=>replayRenderAt(replaySans.length);document.getElementById('replay-range').oninput=e=>replayRenderAt(Number(e.target.value));document.getElementById('replay-play').onclick=()=>{if(replayTimer){stopReplay();document.getElementById('replay-play').textContent='▶ Reproduzir';}else replayPlay();};document.getElementById('replay-close').onclick=()=>{stopReplay();replayMode=false;bar.remove();document.querySelector('[data-tab="new"]').click();init();};
+  document.querySelector('[data-tab="new"]').click();replayRenderAt(0);
  }
  async function loadProfile(){
   const view=document.getElementById('profile-view');if(!user){view.innerHTML='<p class="subtext">Entre para ver seu perfil e estatísticas.</p>';return;}
