@@ -10,7 +10,7 @@
   --light:#eeeed2;--dark:#779556;--green:#81b64b;--green-dark:#639b3e;
   --white:#f7f7f7;--muted:#aaa9a6;--line:#3b3936;
 }
-*{box-sizing:border-box}
+.game-area{display:grid;grid-template-columns:minmax(118px,.62fr) minmax(0,3fr) minmax(118px,.62fr);grid-template-rows:50px minmax(0,1fr) 58px;align-items:center;gap:6px 10px}.playerbar.top,.playerbar.bottom{grid-column:2}.playerbar.top{grid-row:1}.board-wrap{grid-column:2;grid-row:2}.playerbar.bottom{grid-row:3}.arena-info{grid-row:1/4;align-self:stretch;min-width:0;max-height:min(720px,calc(100vh - 32px));overflow:auto;background:#242321;border:1px solid #ffffff18;border-radius:9px;padding:10px;display:flex;flex-direction:column;gap:9px;font-size:11px;color:#ddd}.arena-info.left{grid-column:1}.arena-info.right{grid-column:3}.arena-info strong{font-size:10px;letter-spacing:.08em;color:#c5b5e8}.arena-turn{padding:7px;background:#36332f;border-radius:6px;font-weight:700}.arena-moves,.arena-analysis{display:flex;flex-direction:column;gap:4px;overflow-wrap:anywhere;line-height:1.45}.arena-info .arena-row{padding:4px 5px;background:#302e2b;border-radius:4px}.arena-info .arena-row:nth-child(even){background:#393631}@media(max-width:900px){.game-area{grid-template-columns:1fr 1fr;grid-template-rows:50px minmax(0,1fr) 58px auto}.playerbar.top,.board-wrap,.playerbar.bottom{grid-column:1/3}.playerbar.top{grid-row:1}.board-wrap{grid-row:2}.playerbar.bottom{grid-row:3}.arena-info{grid-row:4;max-height:220px}.arena-info.left{grid-column:1}.arena-info.right{grid-column:2}}@media(max-width:520px){.arena-info{font-size:10px;padding:7px}.game-area{gap:5px}}*{box-sizing:border-box}
 html,body{margin:0;min-height:100%;background:var(--page);color:var(--white);font-family:Arial,Helvetica,sans-serif}
 body{min-height:100vh}
 button,select{font:inherit}
@@ -329,7 +329,9 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
       <div class="avatar">♟</div><div class="player-meta"><span>Adversário</span><span class="rating" id="top-rating"></span></div>
       <div class="clock" id="black-clock">10:00</div>
     </div>
+    <div class="arena-info left" id="arena-info-left"><strong>VEZ E HISTÓRICO</strong><div class="arena-turn" id="arena-turn-left">Aguardando partida</div><div class="arena-moves" id="arena-moves-left"></div><strong>ANÁLISES</strong><div class="arena-analysis" id="arena-analysis-left">As análises aparecerão aqui.</div></div>
     <div class="board-wrap"><div class="board" id="board" aria-label="Tabuleiro de xadrez"></div><div class="move-feedback" id="move-feedback" role="status" aria-live="polite"><span class="feedback-symbol" id="feedback-symbol">✓</span><span class="feedback-copy"><b class="feedback-title" id="feedback-title">Melhor jogada!</b><span class="feedback-detail" id="feedback-detail">Stockfish · análise instantânea</span></span></div></div>
+    <div class="arena-info right" id="arena-info-right"><strong>VEZ E HISTÓRICO</strong><div class="arena-turn" id="arena-turn-right">Aguardando partida</div><div class="arena-moves" id="arena-moves-right"></div><strong>ANÁLISES</strong><div class="arena-analysis" id="arena-analysis-right">As análises aparecerão aqui.</div></div>
     <div class="playerbar bottom">
       <div class="avatar">♙</div><div class="player-meta"><span>mmp7065v2</span><span class="rating">(800) 🇧🇷</span></div>
       <div class="clock" id="white-clock">10:00</div>
@@ -471,7 +473,7 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
    else if(illegal.includes(sq)){const mark=document.createElement('span');mark.className=piece?'capture-mark illegal-capture':'dot illegal-dot';el.append(mark);}
    el.dataset.square=sq;boardEl.append(el);
   }));
-  renderMoves();renderPremoveQueue();document.getElementById('move-count').textContent=game.history().length;
+  renderMoves();updateArenaInfo();renderPremoveQueue();document.getElementById('move-count').textContent=game.history().length;
   const over=game.game_over();
   if(over){
    if(game.in_checkmate()){setStatus('XEQUE-MATE! '+(game.turn()==='w'?'As pretas':'As brancas')+' venceram.','mate');}
@@ -481,6 +483,7 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
   } else if(game.in_check())setStatus('XEQUE! O rei das '+(game.turn()==='w'?'brancas':'pretas')+' está ameaçado. Proteja o rei!','check');
   else if(started)setStatus('Vez das '+(game.turn()==='w'?'brancas':'pretas')+'.');
  }
+ function updateArenaInfo(){const history=game.history(),turn=game.turn()==='w'?'Vez das brancas':'Vez das pretas',rows=[];for(let i=0;i<history.length;i+=2)rows.push('<div class="arena-row">'+(Math.floor(i/2)+1)+'. '+escapeHtml(history[i]||'')+' '+escapeHtml(history[i+1]||'')+'</div>');const analysis=history.map((san,i)=>moveGrades[i+1]?'<div class="arena-row">'+(i+1)+'. '+escapeHtml(san)+' · '+escapeHtml(liveMoveLabels[moveGrades[i+1]]?.[1]||moveGrades[i+1])+'</div>':'').filter(Boolean);for(const side of ['left','right']){const t=document.getElementById('arena-turn-'+side),m=document.getElementById('arena-moves-'+side),a=document.getElementById('arena-analysis-'+side);if(t)t.textContent=turn;if(m)m.innerHTML=rows.join('')||'Nenhum lance ainda.';if(a)a.innerHTML=analysis.join('')||'As análises aparecerão aqui.';}}
  function renderMoves(){
   const h=game.history();if(!h.length){movesEl.innerHTML='<span style="color:#999">Os lances aparecerão aqui.</span>';return;}
   const symbols={brilliant:'!!',great:'!',best:'✓',excellent:'⭐',good:'',interesting:'!?',inaccuracy:'?!',mistake:'?',blunder:'??',miss:'✕',book:'📖',mate:'#'};
@@ -719,7 +722,7 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
  function renderParty(state){
   partyData=state;partyId=state.party.id;document.getElementById('party-lobby').hidden=false;
   document.getElementById('party-code-display').textContent=state.party.code;document.getElementById('party-member-count').textContent=(state.members||[]).length+'/2';
-  const host=state.party.host_user_id===user.id,waiting=state.party.status==='waiting',settings=document.getElementById('party-settings');document.querySelector('.god-tools').hidden=!(host&&state.party.status==='in_game');settings.hidden=!host;document.getElementById('party-guest-settings').hidden=host;const ownMember=(state.members||[]).find(m=>m.user_id===user.id);if(!host&&ownMember){document.getElementById('party-guest-color').value=ownMember.color_preference||'random';document.getElementById('party-guest-color').disabled=!waiting;document.getElementById('party-save-color').disabled=!waiting;}
+  const host=state.party.host_user_id===user.id;document.getElementById('arena-info-left').hidden=!host;document.getElementById('arena-info-right').hidden=host;const waiting=state.party.status==='waiting',settings=document.getElementById('party-settings');document.querySelector('.god-tools').hidden=!(host&&state.party.status==='in_game');settings.hidden=!host;document.getElementById('party-guest-settings').hidden=host;const ownMember=(state.members||[]).find(m=>m.user_id===user.id);if(!host&&ownMember){document.getElementById('party-guest-color').value=ownMember.color_preference||'random';document.getElementById('party-guest-color').disabled=!waiting;document.getElementById('party-save-color').disabled=!waiting;}
   if(host){document.getElementById('party-edit-time').value=String(state.party.time_control_seconds??600);document.getElementById('party-edit-color').value=state.party.color_preference||'random';document.getElementById('party-edit-time').disabled=!waiting;document.getElementById('party-edit-color').disabled=!waiting;document.getElementById('party-save-settings').disabled=!waiting;document.getElementById('party-settings-lock').textContent=waiting?'EDITÁVEL':'🔒 Partida iniciada';}
   document.getElementById('party-members').innerHTML=(state.members||[]).map(m=>{const p=m.profile||{},name=escapeHtml(p.display_name||p.username||'Jogador');return '<div class="party-member"><div class="member-avatar">♟</div><div class="member-info"><strong>'+name+(m.user_id===user.id?' (Você)':'')+'</strong><small>'+(m.assigned_color?('Joga de '+(m.assigned_color==='white'?'brancas':'pretas')):('Preferência: '+(m.color_preference==='random'?'aleatória':m.color_preference==='white'?'brancas':'pretas')) )+'</small></div><span class="member-tag">'+(m.role==='host'?'♛ ANFITRIÃO':'● CONVIDADO')+'</span></div>';}).join('')+(state.members.length<2?'<div class="party-member"><div class="member-avatar">＋</div><div class="member-info"><strong>Aguardando amigo</strong><small>Compartilhe o código para ele entrar.</small></div></div>':'');
   document.getElementById('party-start').hidden=!host;document.getElementById('party-start').disabled=!host||state.members.length!==2||!waiting;document.getElementById('party-enter-game').hidden=state.party.status!=='in_game';
