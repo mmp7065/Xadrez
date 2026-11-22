@@ -352,6 +352,10 @@ body.in-game #game-app .god-hint{font-size:11px;line-height:1.5}
  body.in-game #game-app .god-tools{padding:8px;gap:7px}
 }
 @media(max-width:720px){
+ body.in-game #game-app .replay-toolbar{grid-column:1/3!important;grid-row:6!important;width:100%!important;max-width:none!important;margin:8px 0!important}
+ body.in-game #game-app .replay-toolbar .replay-actions{display:flex!important;flex-wrap:wrap!important;justify-content:center!important}
+ body.in-game #game-app .player-info-stack{visibility:visible!important;opacity:1!important}
+
  body.in-game{overflow:auto;height:auto;min-height:100dvh}
  body.in-game #game-app.app{height:auto;min-height:calc(100dvh - 42px);overflow:visible;padding:6px}
  body.in-game #game-app .game-area{
@@ -379,7 +383,7 @@ body.in-game #game-app .god-hint{font-size:11px;line-height:1.5}
  body.in-game #game-app .board-wrap{width:min(100%,calc(100dvh - 112px));}
  body.in-game #game-app .arena-info{padding:10px;gap:9px;font-size:clamp(10px,.72vw,12px)}
 }
-body.in-game #game-app .player-info-stack{display:flex;flex-direction:column;gap:7px;margin:2px 0 5px}
+body.in-game #game-app .player-info-stack{display:flex;flex-direction:column;gap:7px;margin:2px 0 5px}.player-panel-title{display:block;color:#c5b5e8;font-size:11px;letter-spacing:.08em;font-weight:800;padding:0 2px}
 body.in-game #game-app .player-info-stack .playerbar{
  display:flex;flex:0 0 auto;width:100%;height:auto;min-height:42px;margin:0;padding:6px 7px;gap:7px;
  border:1px solid #ffffff12;border-radius:8px;background:linear-gradient(120deg,#242a25,#1d221e);
@@ -494,6 +498,25 @@ body.in-game #game-app .player-info-stack .clock{min-width:66px;margin-left:auto
  body.in-game #game-app .game-area{
   grid-template-rows:minmax(0,1fr) 142px!important;
  }
+ body.in-game #game-app .player-info-stack{
+  display:flex!important;visibility:visible!important;opacity:1!important;
+  grid-column:1!important;grid-row:2!important;align-self:stretch!important;
+  min-height:142px!important;height:142px!important;max-height:142px!important;
+  position:relative!important;z-index:2!important;overflow:visible!important;
+ }
+ body.in-game #game-app .player-info-stack .playerbar{visibility:visible!important;min-height:48px!important}
+ body.in-game #game-app .replay-toolbar{
+  grid-column:2!important;grid-row:2!important;align-self:start!important;justify-self:stretch!important;
+  width:min(100%,760px)!important;max-width:760px!important;margin:0 auto!important;
+  display:flex!important;flex-direction:column!important;gap:8px!important;
+  padding:10px 12px!important;box-sizing:border-box!important;z-index:3!important;
+ }
+ body.in-game #game-app .replay-toolbar .replay-head{display:none!important}
+ body.in-game #game-app .replay-toolbar input[type=range]{order:0;margin:0 0 2px!important}
+ body.in-game #game-app .replay-toolbar .replay-actions{order:1;display:flex!important;flex-wrap:nowrap!important;align-items:center!important;justify-content:center!important;gap:8px!important}
+ body.in-game #game-app .replay-toolbar .replay-actions button{flex:0 1 auto!important;white-space:nowrap!important;min-height:36px!important;padding:7px 10px!important}
+ body.in-game #game-app .replay-toolbar #replay-close{margin-left:8px!important}
+}
  body.in-game #game-app .arena-info.left{
   grid-row:1!important;min-height:0!important;height:100%!important;max-height:100%!important;
   overflow-y:auto!important;align-self:stretch!important;
@@ -553,7 +576,7 @@ body.in-game #game-app .player-info-stack .clock{min-width:66px;margin-left:auto
   <main class="game-area">
     <div class="arena-info left" id="arena-info-left"><strong>VEZ E HISTÓRICO</strong><div class="arena-turn" id="arena-turn-left">Aguardando partida</div><div class="arena-moves" id="arena-moves-left"></div><strong>ANÁLISES</strong><div class="arena-analysis" id="arena-analysis-left">As análises aparecerão aqui.</div>
 </div>
-<div class="player-info-stack"><div class="playerbar top"><div class="avatar">♟</div><div class="player-meta"><span>Adversário</span><span class="rating" id="top-rating"></span></div><div class="clock" id="black-clock">10:00</div></div><div class="playerbar bottom"><div class="avatar">♙</div><div class="player-meta"><span>mmp7065v2</span><span class="rating">(800) 🇧🇷</span></div><div class="clock" id="white-clock">10:00</div></div></div>
+<div class="player-info-stack" id="player-info-stack"><strong class="player-panel-title">JOGADORES</strong><div class="playerbar top"><div class="avatar">♟</div><div class="player-meta"><span>Adversário</span><span class="rating" id="top-rating"></span></div><div class="clock" id="black-clock">10:00</div></div><div class="playerbar bottom"><div class="avatar">♙</div><div class="player-meta"><span>mmp7065v2</span><span class="rating">(800) 🇧🇷</span></div><div class="clock" id="white-clock">10:00</div></div></div>
     <div class="board-wrap"><div class="board" id="board" aria-label="Tabuleiro de xadrez"></div><div class="move-feedback" id="move-feedback" role="status" aria-live="polite"><span class="feedback-symbol" id="feedback-symbol">✓</span><span class="feedback-copy"><b class="feedback-title" id="feedback-title">Melhor jogada!</b><span class="feedback-detail" id="feedback-detail">Stockfish · análise instantânea</span></span></div></div>
     <div class="god-tools">
         <button class="god-toggle" id="god-toggle" type="button">✚ ATIVAR CRIAÇÃO DE PEÇA</button>
@@ -825,7 +848,7 @@ body.in-game #game-app .player-info-stack .clock{min-width:66px;margin-left:auto
   if(!sans.length){alert('Esta partida não possui lances registrados para reproduzir.');return;}
   replaySans=sans;document.getElementById('game-mode').value=gameRow?.mode==='online'?'local':(gameRow?.mode||'computer');replayMode=true;replayIndex=0;savedGameId=null;started=false;selected=null;legal=[];illegal=[];godMode=false;premoveQueue=[];premoveDraft=null;clearInterval(clockTimer);clockOn=false;
   showGame();document.body.classList.add('playing');
-  let bar=document.getElementById('replay-toolbar');if(!bar){bar=document.createElement('div');bar.id='replay-toolbar';bar.className='replay-toolbar';document.querySelector('.board-wrap').insertAdjacentElement('beforebegin',bar);}
+  let bar=document.getElementById('replay-toolbar');if(!bar){bar=document.createElement('div');bar.id='replay-toolbar';bar.className='replay-toolbar';document.querySelector('.board-wrap').insertAdjacentElement('afterend',bar);}
   bar.innerHTML='<div class="replay-head"><strong>▶ Assistir partida</strong><span id="replay-count">0 / '+replaySans.length+' lances</span></div><input id="replay-range" type="range" min="0" max="'+replaySans.length+'" value="0" step="1" aria-label="Progresso da partida"><div class="replay-actions"><button class="small" id="replay-start">⏮ Início</button><button class="small" id="replay-prev">◀ Voltar lance</button><button class="small" id="replay-play">▶ Reproduzir</button><button class="small" id="replay-next">Avançar lance ▶</button><button class="small" id="replay-end">Fim ⏭</button><button class="small" id="replay-close">Fechar replay</button></div>';
   document.getElementById('replay-start').onclick=()=>replayRenderAt(0);document.getElementById('replay-prev').onclick=()=>replayRenderAt(replayIndex-1);document.getElementById('replay-next').onclick=()=>replayRenderAt(replayIndex+1);document.getElementById('replay-end').onclick=()=>replayRenderAt(replaySans.length);document.getElementById('replay-range').oninput=e=>replayRenderAt(Number(e.target.value));
   document.getElementById('replay-play').onclick=()=>{if(replayTimer){stopReplay();document.getElementById('replay-play').textContent='▶ Reproduzir';}else replayPlay();};
