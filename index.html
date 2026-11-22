@@ -779,13 +779,25 @@ body.in-game #game-app .player-info-stack .clock{min-width:66px;margin-left:auto
   const {error}=await supabase.from('games').update({status:'completed',result,termination,final_fen:game.fen(),pgn:game.pgn(),move_count:game.history().length,finished_at:new Date().toISOString()}).eq('id',savedGameId);
   if(error)console.error(error);else{document.getElementById('cloud-status').textContent='☁ Resultado salvo';loadHistory();loadProfile();}
  }
+ function bindHistoryActions(container){
+  if(!container)return;
+  container.onclick=event=>{
+   const replayButton=event.target.closest('[data-replay]');
+   if(replayButton){replayGame(replayButton.dataset.replay,replayButton.dataset.fen||'');return;}
+   const pgnButton=event.target.closest('[data-pgn]');
+   if(pgnButton){const pgn=decodeURIComponent(pgnButton.dataset.pgn||'');if(!pgn)return alert('Esta partida ainda não possui PGN.');navigator.clipboard?.writeText(pgn).then(()=>alert('PGN copiado para a área de transferência.')).catch(()=>alert('Não foi possível copiar o PGN neste navegador.'));}
+  };
+ }
  async function loadHistory(){
-  const list=document.getElementById('history-list'),hint=document.getElementById('history-hint');if(!user){hint.textContent='Entre na sua conta para ver suas partidas salvas.';list.innerHTML='';return;}
-  hint.textContent='Carregando suas partidas…';const {data,error}=await supabase.from('games').select('id,mode,status,result,termination,time_control_seconds,move_count,created_at,pgn,initial_fen').eq('created_by',user.id).order('created_at',{ascending:false}).limit(30);
-  if(error){hint.textContent='Não foi possível carregar o histórico: '+error.message;return;}hint.textContent=data.length+' partidas encontradas.';
-  list.innerHTML=data.length?data.map(g=>`<div class="history-item"><strong>${g.mode==='computer'?'🤖 Contra o computador':'♟ Partida local'} · ${g.status==='completed'?'Finalizada':'Em andamento'}</strong><span>${new Date(g.created_at).toLocaleString('pt-BR')} · ${g.move_count} lances · ${g.result||'Sem resultado'}</span><br><button class="small" data-pgn="${encodeURIComponent(g.pgn||'')}">Copiar PGN</button><button class="small" data-replay="${g.id}" data-fen="${encodeURIComponent(g.initial_fen||'')}">Abrir tabuleiro</button></div>`).join(''):'<p class="subtext">Você ainda não tem partidas salvas. Entre em uma partida para começar seu histórico.</p>';
-  list.querySelectorAll('[data-pgn]').forEach(b=>b.onclick=()=>{const pgn=decodeURIComponent(b.dataset.pgn);if(!pgn)return alert('Esta partida ainda não possui lances.');navigator.clipboard?.writeText(pgn);alert('PGN copiado para a área de transferência.');});
-  list.querySelectorAll('[data-replay]').forEach(b=>b.onclick=()=>replayGame(b.dataset.replay,decodeURIComponent(b.dataset.fen)));
+  const list=document.getElementById('history-list'),hint=document.getElementById('history-hint'),full=document.getElementById('dashboard-history-full');
+  if(!user){hint.textContent='Entre na sua conta para ver suas partidas salvas.';list.innerHTML='';if(full)full.innerHTML='';return;}
+  hint.textContent='Carregando suas partidas…';
+  const {data,error}=await supabase.from('games').select('id,mode,status,result,termination,time_control_seconds,move_count,created_at,pgn,initial_fen').eq('created_by',user.id).order('created_at',{ascending:false}).limit(30);
+  if(error){hint.textContent='Não foi possível carregar o histórico: '+error.message;return;}
+  hint.textContent=data.length+' partidas encontradas.';
+  const html=data.length?data.map(g=>'<div class="history-item"><strong>'+(g.mode==='computer'?'🤖 Contra o computador':g.mode==='online'?'♟ Festa online':'♟ Partida local')+' · '+(g.status==='completed'?'Finalizada':g.status==='abandoned'?'Interrompida':'Em andamento')+'</strong><span>'+new Date(g.created_at).toLocaleString('pt-BR')+' · '+(g.move_count||0)+' lances · '+(g.result||'Sem resultado')+'</span><br><button class="small" data-pgn="'+encodeURIComponent(g.pgn||'')+'">Copiar PGN</button><button class="small" data-replay="'+g.id+'" data-fen="'+encodeURIComponent(g.initial_fen||'')+'">▶ Assistir partida</button></div>').join(''):'<p class="subtext">Você ainda não tem partidas salvas. Entre em uma partida para começar seu histórico.</p>';
+  list.innerHTML=html;if(full)full.innerHTML=html;
+  bindHistoryActions(list);bindHistoryActions(full);
  }
  function stopReplay(){if(replayTimer){clearInterval(replayTimer);replayTimer=null;}}
  function replayRenderAt(index){
@@ -800,27 +812,24 @@ body.in-game #game-app .player-info-stack .clock{min-width:66px;margin-left:auto
  function replayPlay(){if(replayIndex>=replaySans.length)replayRenderAt(0);if(replayTimer)return;const btn=document.getElementById('replay-play');if(btn)btn.textContent='Ⅱ Pausar';replayTimer=setInterval(()=>{if(replayIndex>=replaySans.length){stopReplay();return;}replayRenderAt(replayIndex+1);if(replayIndex>=replaySans.length)stopReplay();},1100);}
  async function replayGame(id,fen){
   stopReplay();
-  const [{data,error},{data:gameRow,error:gameError}]=await Promise.all([
-    supabase.from('game_moves').select('san,uci,fen_after').eq('game_id',id).order('ply',{ascending:true}),
-    supabase.from('games').select('id,pgn,initial_fen,final_fen,move_count').eq('id',id).maybeSingle()
+  const [{data:moves,error:moveError},{data:gameRow,error:gameError}]=await Promise.all([
+   supabase.from('game_moves').select('san,uci,fen_after,ply').eq('game_id',id).order('ply',{ascending:true}),
+   supabase.from('games').select('id,pgn,initial_fen,final_fen,move_count,mode').eq('id',id).maybeSingle()
   ]);
-  if(error){alert('Não foi possível abrir os lances: '+error.message);return;}
   if(gameError){alert('Não foi possível carregar os dados da partida: '+gameError.message);return;}
-  replayBaseFen=fen||gameRow?.initial_fen||null;
-  replaySans=(data||[]).map(m=>m.san).filter(Boolean);
-  // Algumas partidas antigas guardaram PGN, mas não possuem linhas em game_moves.
-  if(!replaySans.length && gameRow?.pgn){
-    try{
-      const parsed=new Chess(replayBaseFen||undefined);
-      const loaded=parsed.load_pgn(gameRow.pgn,{sloppy:true});
-      if(loaded!==false) replaySans=parsed.history();
-    }catch(parseError){console.warn('PGN do histórico não pôde ser interpretado:',parseError);}
-  }
-  if(!replaySans.length){alert('Esta partida não possui lances registrados para reproduzir.');return;}
-  replayMode=true;replayIndex=0;savedGameId=null;started=false;selected=null;legal=[];illegal=[];godMode=false;document.body.classList.add('playing');clearInterval(clockTimer);
+  replayBaseFen=gameRow?.initial_fen||fen||null;
+  let sans=(moves||[]).map(m=>m.san).filter(Boolean);
+  if(gameRow?.pgn){try{const parsed=new Chess(replayBaseFen||undefined),loaded=parsed.load_pgn(gameRow.pgn,{sloppy:true}),pgnSans=loaded===false?[]:parsed.history();if(pgnSans.length>sans.length)sans=pgnSans;}catch(e){console.warn('PGN não pôde ser interpretado:',e);}}
+  if(!sans.length&&(moves||[]).some(m=>m.uci)){try{const replay=new Chess(replayBaseFen||undefined);for(const m of moves){if(!m.uci)continue;const u=m.uci,made=replay.move({from:u.slice(0,2),to:u.slice(2,4),promotion:u[4]||'q'});if(made)sans.push(made.san);}}catch(e){console.warn('Falha ao reconstruir UCI:',e);}}
+  if(moveError&&!sans.length){alert('Não foi possível carregar os lances: '+moveError.message);return;}
+  if(!sans.length){alert('Esta partida não possui lances registrados para reproduzir.');return;}
+  replaySans=sans;replayMode=true;replayIndex=0;savedGameId=null;started=false;selected=null;legal=[];illegal=[];godMode=false;premoveQueue=[];premoveDraft=null;clearInterval(clockTimer);clockOn=false;
+  showGame();document.body.classList.add('playing');
   let bar=document.getElementById('replay-toolbar');if(!bar){bar=document.createElement('div');bar.id='replay-toolbar';bar.className='replay-toolbar';document.querySelector('.board-wrap').insertAdjacentElement('beforebegin',bar);}
-  bar.innerHTML='<div class="replay-head"><strong>▶ Assistir partida</strong><span id="replay-count">0 / '+replaySans.length+' lances</span></div><input id="replay-range" type="range" min="0" max="'+replaySans.length+'" value="0" step="1" aria-label="Progresso da partida"><div class="replay-actions"><button class="small" id="replay-start">⏮</button><button class="small" id="replay-prev">◀</button><button class="small" id="replay-play">▶ Reproduzir</button><button class="small" id="replay-next">▶</button><button class="small" id="replay-end">⏭</button><button class="small" id="replay-close">Fechar replay</button></div>';
-  document.getElementById('replay-start').onclick=()=>replayRenderAt(0);document.getElementById('replay-prev').onclick=()=>replayRenderAt(replayIndex-1);document.getElementById('replay-next').onclick=()=>replayRenderAt(replayIndex+1);document.getElementById('replay-end').onclick=()=>replayRenderAt(replaySans.length);document.getElementById('replay-range').oninput=e=>replayRenderAt(Number(e.target.value));document.getElementById('replay-play').onclick=()=>{if(replayTimer){stopReplay();document.getElementById('replay-play').textContent='▶ Reproduzir';}else replayPlay();};document.getElementById('replay-close').onclick=()=>{stopReplay();replayMode=false;bar.remove();document.querySelector('[data-tab="new"]').click();init();};
+  bar.innerHTML='<div class="replay-head"><strong>▶ Assistir partida</strong><span id="replay-count">0 / '+replaySans.length+' lances</span></div><input id="replay-range" type="range" min="0" max="'+replaySans.length+'" value="0" step="1" aria-label="Progresso da partida"><div class="replay-actions"><button class="small" id="replay-start">⏮ Início</button><button class="small" id="replay-prev">◀ Voltar lance</button><button class="small" id="replay-play">▶ Reproduzir</button><button class="small" id="replay-next">Avançar lance ▶</button><button class="small" id="replay-end">Fim ⏭</button><button class="small" id="replay-close">Fechar replay</button></div>';
+  document.getElementById('replay-start').onclick=()=>replayRenderAt(0);document.getElementById('replay-prev').onclick=()=>replayRenderAt(replayIndex-1);document.getElementById('replay-next').onclick=()=>replayRenderAt(replayIndex+1);document.getElementById('replay-end').onclick=()=>replayRenderAt(replaySans.length);document.getElementById('replay-range').oninput=e=>replayRenderAt(Number(e.target.value));
+  document.getElementById('replay-play').onclick=()=>{if(replayTimer){stopReplay();document.getElementById('replay-play').textContent='▶ Reproduzir';}else replayPlay();};
+  document.getElementById('replay-close').onclick=()=>{stopReplay();replayMode=false;bar.remove();document.body.classList.remove('playing');document.getElementById('back-dashboard').click();};
   document.querySelector('[data-tab="new"]').click();replayRenderAt(0);
  }
  async function loadProfile(){
