@@ -507,11 +507,22 @@ body.in-game #game-app .player-info-stack .clock{min-width:66px;margin-left:auto
  body.in-game #game-app .player-info-stack{grid-column:1!important;grid-row:2!important;display:flex!important;width:100%!important;height:142px!important;min-height:142px!important;max-height:142px!important;margin:0!important;padding:12px 14px!important;box-sizing:border-box!important;background:#242321!important;align-self:stretch!important;overflow:hidden!important}
  body.in-game #game-app .player-info-stack{
   display:flex!important;visibility:visible!important;opacity:1!important;
-  grid-column:1!important;grid-row:2!important;align-self:stretch!important;
-  min-height:142px!important;height:142px!important;max-height:142px!important;
-  position:relative!important;z-index:2!important;overflow:visible!important;
+  grid-column:1!important;grid-row:2!important;align-self:end!important;justify-self:stretch!important;
+  width:100%!important;min-width:0!important;min-height:142px!important;height:142px!important;max-height:142px!important;
+  margin:0!important;padding:8px 12px!important;box-sizing:border-box!important;
+  position:relative!important;left:auto!important;right:auto!important;bottom:0!important;z-index:2!important;
+  overflow:hidden!important;border-radius:0 12px 0 0!important;
  }
- body.in-game #game-app .player-info-stack .playerbar{visibility:visible!important;min-height:48px!important}
+ body.in-game #game-app .player-info-stack .player-panel-title{flex:0 0 14px!important;line-height:14px!important;margin:0!important;padding:0 2px!important}
+ body.in-game #game-app .player-info-stack .playerbar{
+  display:flex!important;visibility:visible!important;opacity:1!important;flex:1 1 0!important;
+  width:100%!important;min-width:0!important;min-height:0!important;height:auto!important;max-height:52px!important;
+  margin:0!important;padding:5px 8px!important;box-sizing:border-box!important;
+ }
+ body.in-game #game-app .player-info-stack .avatar{width:30px!important;height:30px!important;flex:0 0 30px!important;font-size:21px!important}
+ body.in-game #game-app .player-info-stack .player-meta{min-width:0!important;flex:1 1 auto!important;overflow:hidden!important}
+ body.in-game #game-app .player-info-stack .player-meta span{white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
+ body.in-game #game-app .player-info-stack .clock{min-width:62px!important;padding:5px 7px!important;font-size:17px!important;flex:0 0 auto!important}
  body.in-game #game-app .board-wrap{
   grid-column:2!important;grid-row:1!important;align-self:center!important;justify-self:center!important;
   width:min(100%,calc(100dvh - 180px))!important;max-height:calc(100dvh - 180px)!important;
