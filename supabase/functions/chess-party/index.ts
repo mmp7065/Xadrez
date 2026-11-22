@@ -30,6 +30,32 @@ async function notifyParty(partyId: string, event: string, extra: Record<string,
   try { await channel.send({ type: "broadcast", event: "party_event", payload: { event, ...extra, at: Date.now() } }); }
   finally { await admin.removeChannel(channel); }
 }
+
+type AbilityMap = { white: Record<string,string>; black: Record<string,string> };
+function visualMapFromFen(fen: string): Record<string,string> {
+  const ranks = fen.split(" ")[0].split("/"), out: Record<string,string> = {};
+  for (let r=0;r<8;r++) { let file=0; for (const ch of ranks[r]) { if (/^[1-8]$/.test(ch)) file += Number(ch); else { out[String.fromCharCode(97+file)+(8-r)] = ch.toLowerCase(); file++; } } }
+  return out;
+}
+function encodeFenBoard(cells: string[][]): string {
+  return cells.map(row => { let s="",empty=0; for (const p of row) { if (!p) empty++; else { if (empty) s+=empty; s+=p; empty=0; } } if (empty) s+=empty; return s; }).join("/");
+}
+function mapEngineFen(fen: string, abilities: AbilityMap, visual: Record<string,string>): string {
+  const parts=fen.split(" "), rows=parts[0].split("/"), board:string[][]=[];
+  for(let r=0;r<8;r++){const row:string[]=[];for(const ch of rows[r]){if(/^[1-8]$/.test(ch))for(let n=0;n<Number(ch);n++)row.push("");else row.push(ch);}board.push(row);}
+  for(let r=0;r<8;r++)for(let c=0;c<8;c++){const p=board[r][c];if(!p)continue;const sq=String.fromCharCode(97+c)+(8-r),side=p===p.toUpperCase()?"white":"black",visualType=visual[sq]||p.toLowerCase(),ability=abilities?.[side]?.[visualType]||visualType;board[r][c]=side==="white"?ability.toUpperCase():ability;}
+  parts[0]=encodeFenBoard(board);return parts.join(" ");
+}
+function applyVisualMove(visual: Record<string,string>, from: string, to: string, move: any): Record<string,string> {
+  const next={...visual},moving=next[from]||move.piece||"p";delete next[from];
+  if(move.flags?.includes("e"))delete next[to[0]+from[1]];
+  if(move.flags?.includes("k")||move.flags?.includes("q")){
+    const rank=from[1],rookFrom=move.flags.includes("k")?"h"+rank:"a"+rank,rookTo=move.flags.includes("k")?"f"+rank:"d"+rank;
+    if(next[rookFrom]){next[rookTo]=next[rookFrom];delete next[rookFrom];}else next[rookTo]="r";
+  }
+  next[to]=move.promotion||moving;return next;
+}
+
 async function partyState(partyId: string) {
   const { data: party, error } = await admin.from("chess_parties").select("*").eq("id", partyId).single();
   if (error || !party) throw new Error("Festa não encontrada.");
@@ -41,6 +67,11 @@ async function partyState(partyId: string) {
   if (party.game_id) {
     const { data } = await admin.from("games").select("id,status,result,termination,time_control_seconds,initial_fen,final_fen,pgn,move_count,created_at").eq("id", party.game_id).maybeSingle();
     game = data;
+    // Estado CHEAT é pequeno e carregado junto da festa; evita consultas por casa/lance.
+    const { data: cheatState } = await admin.from("chess_party_cheat_state").select("piece_abilities,visual_positions,game_id,updated_at").eq("party_id",partyId).maybeSingle();
+    const initialFen=String(game?.final_fen||game?.initial_fen||"");
+    const visualPositions=cheatState?.visual_positions && Object.keys(cheatState.visual_positions).length ? cheatState.visual_positions : visualMapFromFen(initialFen);
+    game = game ? { ...game, piece_abilities: cheatState?.piece_abilities || {white:{},black:{}}, visual_positions: visualPositions } : game;
     // Histórico é carregado separadamente; não buscar todos os lances a cada atualização.
     moves = [];
   }
@@ -213,6 +244,34 @@ Deno.serve(async (req) => {
       await notifyParty(partyId, "player_left", { userId: user.id });
       return json({ ok: true });
     }
+    if (action === "set_ability") {
+      const { data: party } = await admin.from("chess_parties").select("game_id,status,host_user_id").eq("id", partyId).single();
+      if (!party?.game_id || party.status !== "in_game") throw new Error("A troca de função só funciona durante uma partida ativa.");
+      if (party.host_user_id !== user.id || member.role !== "host") throw new Error("Somente o anfitrião pode alterar as habilidades.");
+      const { data: seat } = await admin.from("chess_party_members").select("assigned_color").eq("party_id",partyId).eq("user_id",user.id).single();
+      const targetColor=String(body.targetColor||"");
+      const sourcePiece=String(body.sourcePiece||""), abilityPiece=String(body.abilityPiece||"");
+      if (!["white","black"].includes(targetColor) || targetColor !== seat?.assigned_color) throw new Error("Você só pode alterar as peças da sua própria equipe.");
+      if (!["p","n","b","r","q","k"].includes(sourcePiece) || !["p","n","b","r","q","k"].includes(abilityPiece)) throw new Error("Tipo de peça inválido.");
+      const { data: row, error: readError } = await admin.from("games").select("id,final_fen,initial_fen").eq("id",party.game_id).single();
+      if(readError||!row)throw new Error("Não foi possível carregar o tabuleiro.");
+      const currentFen=String(row.final_fen||row.initial_fen),{data:existing}=await admin.from("chess_party_cheat_state").select("*").eq("party_id",partyId).maybeSingle();
+      const visual=existing?.visual_positions&&Object.keys(existing.visual_positions).length?existing.visual_positions:visualMapFromFen(currentFen);
+      const abilities:AbilityMap=existing?.piece_abilities||{white:{},black:{}};
+      const nextAbilities:AbilityMap={white:{...(abilities.white||{})},black:{...(abilities.black||{})}};
+      if(abilityPiece===sourcePiece)delete nextAbilities[targetColor][sourcePiece];else nextAbilities[targetColor][sourcePiece]=abilityPiece;
+      const nextFen=mapEngineFen(currentFen,nextAbilities,visual);
+      const {error:updateError}=await admin.from("games").update({final_fen:nextFen}).eq("id",party.game_id);
+      if(updateError)throw updateError;
+      const now=new Date().toISOString();
+      const statePayload={party_id:partyId,game_id:party.game_id,piece_abilities:nextAbilities,visual_positions:visual,created_by:user.id,updated_by:user.id,updated_at:now};
+      const {error:stateError}=await admin.from("chess_party_cheat_state").upsert(statePayload,{onConflict:"party_id"});
+      if(stateError)throw stateError;
+      const {error:logError}=await admin.from("chess_party_cheat_actions").insert({party_id:partyId,game_id:party.game_id,actor_user_id:user.id,action_type:"change_ability",target_color:targetColor,source_piece:sourcePiece,ability_piece:abilityPiece,payload:{reset:abilityPiece===sourcePiece}});
+      if(logError)throw logError;
+      await notifyParty(partyId,"abilities_updated",{gameId:party.game_id,fen:nextFen,pieceAbilities:nextAbilities,visualPositions:visual,targetColor,sourcePiece,abilityPiece});
+      return {ok:true,fen:nextFen,pieceAbilities:nextAbilities,visualPositions:visual,targetColor,sourcePiece,abilityPiece};
+    }
     if (action === "god_edit") {
       const { data: party } = await admin.from("chess_parties").select("game_id,status,host_user_id").eq("id", partyId).single();
       if (!party?.game_id || party.status !== "in_game") throw new Error("O Modo Deus só funciona durante uma partida ativa.");
@@ -231,7 +290,7 @@ Deno.serve(async (req) => {
       const board = ranks.map(decode);
       if (board.length !== 8 || board.some(r => r.length !== 8)) throw new Error("Estrutura do tabuleiro inválida.");
       if (type === "k") for (let r=0;r<8;r++) for(let c=0;c<8;c++) if(board[r][c] === (color==="w"?"K":"k")) board[r][c]="";
-      if (editAction === "transform") { if (!["p","n","b","r","q","k"].includes(sourcePieceType)) throw new Error("Tipo de peça de origem inválido."); let changed=0; for(let r=0;r<8;r++) for(let c=0;c<8;c++){ const current=board[r][c]; if(current && current.toLowerCase()===sourcePieceType){ board[r][c]=current===current.toUpperCase()?type.toUpperCase():type; changed++; }} if(!changed) throw new Error("Não há peças desse tipo no tabuleiro."); } else { if (type === "k") for (let r=0;r<8;r++) for(let c=0;c<8;c++) if(board[r][c] === (color==="w"?"K":"k")) board[r][c]=""; board[rankIndex][fileIndex] = color === "w" ? type.toUpperCase() : type; }
+      if (editAction === "transform") throw new Error("Use a ferramenta Trocar função: ela altera somente as habilidades da sua equipe, sem substituir as imagens."); else { if (type === "k") for (let r=0;r<8;r++) for(let c=0;c<8;c++) if(board[r][c] === (color==="w"?"K":"k")) board[r][c]=""; board[rankIndex][fileIndex] = color === "w" ? type.toUpperCase() : type; }
       fields[0] = board.map(encode).join("/");
       const updatedFen = fields.join(" ");
       const { error: updateError } = await admin.from("games").update({ final_fen: updatedFen }).eq("id", party.game_id);
@@ -253,6 +312,12 @@ Deno.serve(async (req) => {
       if (!/^[a-h][1-8]$/.test(from) || !/^[a-h][1-8]$/.test(to)) throw new Error("Movimento inválido.");
       const result = chess.move({ from, to, promotion: body.promotion || "q" });
       if (!result) throw new Error("Esse movimento não é permitido.");
+      const {data:cheatState}=await admin.from("chess_party_cheat_state").select("piece_abilities,visual_positions").eq("party_id",partyId).maybeSingle();
+      const visualBefore=cheatState?.visual_positions&&Object.keys(cheatState.visual_positions).length?cheatState.visual_positions:visualMapFromFen(expectedFen);
+      const visualAfter=applyVisualMove(visualBefore,from,to,result);
+      const abilities:AbilityMap=cheatState?.piece_abilities||{white:{},black:{}};
+      const {error:visualError}=await admin.from("chess_party_cheat_state").upsert({party_id:partyId,game_id:party.game_id,piece_abilities:abilities,visual_positions:visualAfter,created_by:user.id,updated_by:user.id,updated_at:new Date().toISOString()},{onConflict:"party_id"});
+      if(visualError)throw visualError;
       const ply = (gameRow.move_count || 0) + 1;
       const { error: commitError } = await admin.rpc("commit_party_move", {
         p_party_id: partyId, p_game_id: party.game_id, p_user_id: user.id,
@@ -272,7 +337,7 @@ Deno.serve(async (req) => {
       }
       const finished = chess.isGameOver();
       await notifyParty(partyId, "move_committed", {
-        gameId: party.game_id, fen: chess.fen(), from, to, san: result.san, ply, color,
+        gameId: party.game_id, fen: chess.fen(), from, to, san: result.san, ply, color, visualPositions: visualAfter, pieceAbilities: abilities,
         status: finished ? "finished" : "in_game", promotion: result.promotion || null,
         result: finished ? (chess.isCheckmate() ? (color === "white" ? "white_win" : "black_win") : "draw") : null,
         termination: finished ? (chess.isCheckmate() ? "checkmate" : chess.isStalemate() ? "stalemate" : "draw") : null,
@@ -285,7 +350,7 @@ Deno.serve(async (req) => {
         fen: chess.fen()
       });
       return json({
-        move: { from, to, san: result.san, fen: chess.fen(), ply, color },
+        move: { from, to, san: result.san, fen: chess.fen(), ply, color, visualPositions: visualAfter, pieceAbilities: abilities },
         game: { id: party.game_id, status: finished ? "completed" : "in_progress", result: finished ? (chess.isCheckmate() ? (color === "white" ? "white_win" : "black_win") : "draw") : null, time_control_seconds: gameRow.time_control_seconds },
       });
     }
