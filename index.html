@@ -332,6 +332,7 @@ body.in-game #game-app .arena-info{
 }
 body.in-game #game-app .arena-info.left{grid-column:1!important}
 body.in-game #game-app .arena-info.right{grid-column:3!important}
+body.in-game:not(.party-game) #game-app .arena-info.right{display:none!important}
 body.in-game #game-app .god-tools{
   grid-column:3!important;grid-row:1/4!important;align-self:stretch!important;min-height:0;height:100%;
   max-height:none!important;overflow-y:auto;overflow-x:hidden;margin:0!important;padding:12px;
