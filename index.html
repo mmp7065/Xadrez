@@ -707,10 +707,10 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
   b.textContent=godMode?'⚡ CHEAT: ATIVADO':'✦ MODO DEUS: DESATIVADO';
   document.getElementById('god-hint').textContent=godMode?'Clique em qualquer casa para invocar a peça escolhida. A peça existente será substituída.':'Ative o CHEAT e clique em qualquer casa para colocar a peça escolhida. A peça que já estiver na casa será substituída.';
   if(godMode){started=true;document.body.classList.add('playing');setStatus('CHEAT ativado. Escolha cor e peça e clique em uma casa do tabuleiro.');}
-  else setStatus('Modo Deus desativado. As regras normais de xadrez voltaram.');
+  else setStatus('CHEAT desativado. As regras normais de xadrez voltaram.');
   render();
  };
- document.getElementById('custom-btn').onclick=()=>setStatus('Desafio personalizado: use o Modo Deus para montar posições e cenários personalizados.');
+ document.getElementById('custom-btn').onclick=()=>setStatus('Desafio personalizado: use o CHEAT para montar posições e cenários personalizados.');
  document.getElementById('friend-btn').onclick=()=>setStatus('Jogar com um amigo: por enquanto, compartilhe o mesmo computador e alternem os lances. Convites online serão uma etapa futura.');
  document.getElementById('tournament-btn').onclick=()=>setStatus('Torneios ainda não estão disponíveis neste protótipo.');
  document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');['new','games','players'].forEach(t=>document.getElementById(t+'-panel').hidden=t!==b.dataset.tab);if(b.dataset.tab==='games')loadHistory();if(b.dataset.tab==='players')loadProfile();});
