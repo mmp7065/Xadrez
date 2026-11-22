@@ -253,7 +253,7 @@ Deno.serve(async (req) => {
       const targetColor=String(body.targetColor||"");
       const sourcePiece=String(body.sourcePiece||""), abilityPiece=String(body.abilityPiece||"");
       if (!["white","black"].includes(targetColor) || targetColor !== seat?.assigned_color) throw new Error("Você só pode alterar as peças da sua própria equipe.");
-      if (!["p","n","b","r","q","k"].includes(sourcePiece) || !["p","n","b","r","q","k"].includes(abilityPiece)) throw new Error("Tipo de peça inválido.");
+      if (!["p","n","b","r","q"].includes(sourcePiece) || !["p","n","b","r","q"].includes(abilityPiece)) throw new Error("Escolha peão, cavalo, bispo, torre ou dama. O rei mantém regras próprias de segurança e não pode ter a habilidade alterada.");
       const { data: row, error: readError } = await admin.from("games").select("id,final_fen,initial_fen").eq("id",party.game_id).single();
       if(readError||!row)throw new Error("Não foi possível carregar o tabuleiro.");
       const currentFen=String(row.final_fen||row.initial_fen),{data:existing}=await admin.from("chess_party_cheat_state").select("*").eq("party_id",partyId).maybeSingle();
@@ -332,7 +332,7 @@ Deno.serve(async (req) => {
         p_uci: result.from + result.to + (result.promotion || ""), p_ply: ply,
         p_color: color, p_clock_remaining_seconds: Math.max(0, Number(body.clockRemainingSeconds) || 0),
       });
-      if (commitError) throw new Error(commitError.message.includes("POSITION_OUTDATED") ? "A posição mudou. Sincronizando a partida…" : commitError.message);
+      if (commitError) throw new Error(commitError.message.includes("POSITION_OUTDATED") ? "A posição mudou. Sincronizando a partida…" : commitError.message);\n      const {error:visualError}=await admin.from("chess_party_cheat_state").upsert({party_id:partyId,game_id:party.game_id,piece_abilities:abilities,visual_positions:visualAfter,created_by:user.id,updated_by:user.id,updated_at:new Date().toISOString()},{onConflict:"party_id"});\n      if(visualError)throw visualError;
       if (chess.isGameOver()) {
         let resultCode = "draw", termination = "draw";
         if (chess.isCheckmate()) { resultCode = color === "white" ? "white_win" : "black_win"; termination = "checkmate"; }
