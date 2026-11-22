@@ -661,20 +661,20 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
   siteChannel=ch;
   ch.subscribe(status=>{if(status==='CHANNEL_ERROR'||status==='TIMED_OUT')console.warn('Site Realtime connection:',status);});
  }
- function summonPiece(square){
+ async function summonPiece(square){
   const color=document.getElementById('god-color').value,type=document.getElementById('god-piece').value;
+  if(document.getElementById('game-mode').value==='online'){
+   if(!partyData||partyData.party?.host_user_id!==user?.id){setStatus('Somente o anfitrião pode usar o Modo Deus.','check');return;}
+   try{setStatus('Aplicando alteração do Modo Deus…');const result=await partyRequest('god_edit',{square,color,pieceType:type});game=new Chess(result.fen);selected=null;legal=[];illegal=[];render();setStatus(glyph[color+type]+' '+pieceName[type].toUpperCase()+' colocado em '+square.toUpperCase()+'. Alteração sincronizada para os dois jogadores.');}
+   catch(error){setStatus('Não foi possível alterar a peça: '+error.message,'check');}
+   return;
+  }
   const piece=game.get(square);if(piece)game.remove(square);
-  if(type==='k'){
-   const oldKing=kingSquare(color);if(oldKing)game.remove(oldKing);
-  }
+  if(type==='k'){const oldKing=kingSquare(color);if(oldKing)game.remove(oldKing);}
   const ok=game.put({type,color},square);
-  if(!ok){
-   if(piece)game.put(piece,square);
-   setStatus('Não foi possível colocar essa peça nessa casa. Tente outra posição.','check');return;
-  }
+  if(!ok){if(piece)game.put(piece,square);setStatus('Não foi possível colocar essa peça nessa casa. Tente outra posição.','check');return;}
   selected=null;legal=[];illegal=[];started=true;document.body.classList.add('playing');
-  setStatus(glyph[color+type]+' '+pieceName[type].toUpperCase()+' invocado(a) em '+square.toUpperCase()+'. Modo Deus ativo.');
-  render();
+  setStatus(glyph[color+type]+' '+pieceName[type].toUpperCase()+' colocado em '+square.toUpperCase()+'. Modo Deus ativo.');render();
  }
  function startClock(){
   clearInterval(clockTimer);clockTimer=setInterval(()=>{
@@ -690,6 +690,7 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
  document.getElementById('undo-btn').onclick=()=>{if(!game||!game.history().length)return;game.undo();started=true;document.body.classList.add('playing');selected=null;legal=[];illegal=[];render();};
  document.getElementById('flip-btn').onclick=()=>{flipped=!flipped;render();};
  document.getElementById('god-toggle').onclick=()=>{
+  if(document.getElementById('game-mode').value==='online'&&(!partyData||partyData.party?.host_user_id!==user?.id)){setStatus('Somente o anfitrião pode ativar o Modo Deus.','check');return;}
   godMode=!godMode;selected=null;legal=[];illegal=[];
   const b=document.getElementById('god-toggle');b.classList.toggle('active',godMode);
   b.textContent=godMode?'✦ MODO DEUS: ATIVADO':'✦ MODO DEUS: DESATIVADO';
@@ -711,7 +712,7 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
  function renderParty(state){
   partyData=state;partyId=state.party.id;document.getElementById('party-lobby').hidden=false;
   document.getElementById('party-code-display').textContent=state.party.code;document.getElementById('party-member-count').textContent=(state.members||[]).length+'/2';
-  const host=state.party.host_user_id===user.id,waiting=state.party.status==='waiting',settings=document.getElementById('party-settings');settings.hidden=!host;document.getElementById('party-guest-settings').hidden=host;const ownMember=(state.members||[]).find(m=>m.user_id===user.id);if(!host&&ownMember){document.getElementById('party-guest-color').value=ownMember.color_preference||'random';document.getElementById('party-guest-color').disabled=!waiting;document.getElementById('party-save-color').disabled=!waiting;}
+  const host=state.party.host_user_id===user.id,waiting=state.party.status==='waiting',settings=document.getElementById('party-settings');document.querySelector('.god-tools').hidden=!(host&&state.party.status==='in_game');settings.hidden=!host;document.getElementById('party-guest-settings').hidden=host;const ownMember=(state.members||[]).find(m=>m.user_id===user.id);if(!host&&ownMember){document.getElementById('party-guest-color').value=ownMember.color_preference||'random';document.getElementById('party-guest-color').disabled=!waiting;document.getElementById('party-save-color').disabled=!waiting;}
   if(host){document.getElementById('party-edit-time').value=String(state.party.time_control_seconds??600);document.getElementById('party-edit-color').value=state.party.color_preference||'random';document.getElementById('party-edit-time').disabled=!waiting;document.getElementById('party-edit-color').disabled=!waiting;document.getElementById('party-save-settings').disabled=!waiting;document.getElementById('party-settings-lock').textContent=waiting?'EDITÁVEL':'🔒 Partida iniciada';}
   document.getElementById('party-members').innerHTML=(state.members||[]).map(m=>{const p=m.profile||{},name=escapeHtml(p.display_name||p.username||'Jogador');return '<div class="party-member"><div class="member-avatar">♟</div><div class="member-info"><strong>'+name+(m.user_id===user.id?' (Você)':'')+'</strong><small>'+(m.assigned_color?('Joga de '+(m.assigned_color==='white'?'brancas':'pretas')):('Preferência: '+(m.color_preference==='random'?'aleatória':m.color_preference==='white'?'brancas':'pretas')) )+'</small></div><span class="member-tag">'+(m.role==='host'?'♛ ANFITRIÃO':'● CONVIDADO')+'</span></div>';}).join('')+(state.members.length<2?'<div class="party-member"><div class="member-avatar">＋</div><div class="member-info"><strong>Aguardando amigo</strong><small>Compartilhe o código para ele entrar.</small></div></div>':'');
   document.getElementById('party-start').hidden=!host;document.getElementById('party-start').disabled=!host||state.members.length!==2||!waiting;document.getElementById('party-enter-game').hidden=state.party.status!=='in_game';
@@ -727,6 +728,7 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
      try{
       if(notice.event==='move_classified'&&notice.gameId===onlineGameId&&Number.isInteger(Number(notice.ply))&&notice.classification){moveGrades[Number(notice.ply)]=notice.classification;render();renderMoves();refreshResultSummaryFromGrades();return;}
       if(notice.event==='move_committed'&&notice.fen&&document.body.classList.contains('in-game')){applyRealtimeMove(notice);return;}
+      if(notice.event==='board_overridden'&&notice.fen&&notice.gameId===onlineGameId&&document.body.classList.contains('in-game')){game=new Chess(notice.fen);selected=null;legal=[];illegal=[];premoveQueue=[];premoveDraft=null;render();renderMoves();setStatus('O anfitrião alterou uma peça com o Modo Deus.');return;}
       if(notice.event==='rematch_requested'&&notice.requestedBy!==user.id){pendingRematchRequest=notice.requestId||null;document.getElementById('rematch-notice-text').textContent='Seu adversário quer jogar mais uma partida com você. Deseja aceitar?';document.getElementById('rematch-notice-status').textContent='';document.getElementById('rematch-notice-modal').classList.add('show');return;}if(notice.event==='rematch_declined'&&notice.requestedBy===user.id){const b=document.getElementById('result-rematch');b.disabled=false;b.textContent='🤝 Pedir revanche novamente';document.getElementById('result-foot').textContent='Seu adversário recusou a revanche.';return;}
       const state=await partyRequest('state',{partyId:id});renderParty(state);
       if(notice.event==='rematch_started'&&state.game){onlineGameId=null;closeResult();await launchPartyGame(state);return;}
