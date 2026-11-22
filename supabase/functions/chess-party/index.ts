@@ -217,7 +217,7 @@ Deno.serve(async (req) => {
       const { data: party } = await admin.from("chess_parties").select("game_id,status,host_user_id").eq("id", partyId).single();
       if (!party?.game_id || party.status !== "in_game") throw new Error("O Modo Deus só funciona durante uma partida ativa.");
       if (party.host_user_id !== user.id || member.role !== "host") throw new Error("Somente o anfitrião pode usar o Modo Deus.");
-      const square = String(body.square || ""), color = String(body.color || ""), type = String(body.pieceType || ""), editAction = String(body.editAction || "replace");
+      const square = String(body.square || ""), color = String(body.color || ""), type = String(body.pieceType || ""), sourcePieceType = String(body.sourcePieceType || ""), editAction = String(body.editAction || "replace");
       if (!/^[a-h][1-8]$/.test(square) || !["w","b"].includes(color) || !["p","n","b","r","q","k"].includes(type)) throw new Error("Peça ou casa inválida.");
       const { data: row, error: readError } = await admin.from("games").select("id,final_fen,initial_fen").eq("id", party.game_id).single();
       if (readError || !row) throw new Error("Não foi possível carregar o tabuleiro.");
@@ -231,7 +231,7 @@ Deno.serve(async (req) => {
       const board = ranks.map(decode);
       if (board.length !== 8 || board.some(r => r.length !== 8)) throw new Error("Estrutura do tabuleiro inválida.");
       if (type === "k") for (let r=0;r<8;r++) for(let c=0;c<8;c++) if(board[r][c] === (color==="w"?"K":"k")) board[r][c]="";
-      if (editAction === "transform") { const current = board[rankIndex][fileIndex]; if (!current) throw new Error("Selecione uma casa que contenha uma peça."); board[rankIndex][fileIndex] = current === current.toUpperCase() ? type.toUpperCase() : type; } else { if (type === "k") for (let r=0;r<8;r++) for(let c=0;c<8;c++) if(board[r][c] === (color==="w"?"K":"k")) board[r][c]=""; board[rankIndex][fileIndex] = color === "w" ? type.toUpperCase() : type; }
+      if (editAction === "transform") { if (!["p","n","b","r","q","k"].includes(sourcePieceType)) throw new Error("Tipo de peça de origem inválido."); let changed=0; for(let r=0;r<8;r++) for(let c=0;c<8;c++){ const current=board[r][c]; if(current && current.toLowerCase()===sourcePieceType){ board[r][c]=current===current.toUpperCase()?type.toUpperCase():type; changed++; }} if(!changed) throw new Error("Não há peças desse tipo no tabuleiro."); } else { if (type === "k") for (let r=0;r<8;r++) for(let c=0;c<8;c++) if(board[r][c] === (color==="w"?"K":"k")) board[r][c]=""; board[rankIndex][fileIndex] = color === "w" ? type.toUpperCase() : type; }
       fields[0] = board.map(encode).join("/");
       const updatedFen = fields.join(" ");
       const { error: updateError } = await admin.from("games").update({ final_fen: updatedFen }).eq("id", party.game_id);
