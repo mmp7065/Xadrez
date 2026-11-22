@@ -800,16 +800,16 @@ body.in-game #game-app .player-info-stack .clock{min-width:66px;margin-left:auto
   bindHistoryActions(list);bindHistoryActions(full);
  }
  function stopReplay(){if(replayTimer){clearInterval(replayTimer);replayTimer=null;}}
- function replayRenderAt(index){
-  stopReplay();replayIndex=Math.max(0,Math.min(index,replaySans.length));game=new Chess(replayBaseFen||undefined);
+ function replayRenderAt(index,keepPlaying=false){
+  if(!keepPlaying)stopReplay();replayIndex=Math.max(0,Math.min(index,replaySans.length));game=new Chess(replayBaseFen||undefined);
   for(let i=0;i<replayIndex;i++){if(!game.move(replaySans[i]))break;}
   selected=null;legal=[];illegal=[];premoveQueue=[];refreshMoves();render();
   const count=document.getElementById('replay-count');if(count)count.textContent=replayIndex+' / '+replaySans.length+' lances';
   const range=document.getElementById('replay-range');if(range)range.value=String(replayIndex);
-  const play=document.getElementById('replay-play');if(play)play.textContent=replayIndex>=replaySans.length?'↻ Reproduzir':'▶ Reproduzir';
+  const play=document.getElementById('replay-play');if(play)play.textContent=replayIndex>=replaySans.length?'↻ Reproduzir':replayTimer?'Ⅱ Pausar':'▶ Reproduzir';
   setStatus(replayIndex===0?'Replay · início da partida':replayIndex===replaySans.length?'Replay · fim da partida':'Replay · lance '+replayIndex+' de '+replaySans.length);
  }
- function replayPlay(){if(replayIndex>=replaySans.length)replayRenderAt(0);if(replayTimer)return;const btn=document.getElementById('replay-play');if(btn)btn.textContent='Ⅱ Pausar';replayTimer=setInterval(()=>{if(replayIndex>=replaySans.length){stopReplay();return;}replayRenderAt(replayIndex+1);if(replayIndex>=replaySans.length)stopReplay();},1100);}
+ function replayPlay(){if(replayIndex>=replaySans.length)replayRenderAt(0);if(replayTimer)return;const btn=document.getElementById('replay-play');if(btn)btn.textContent='Ⅱ Pausar';replayTimer=setInterval(()=>{if(replayIndex>=replaySans.length){stopReplay();return;}replayRenderAt(replayIndex+1,true);if(replayIndex>=replaySans.length){stopReplay();const b=document.getElementById('replay-play');if(b)b.textContent='↻ Reproduzir';}},1100);}
  async function replayGame(id,fen){
   stopReplay();
   const [{data:moves,error:moveError},{data:gameRow,error:gameError}]=await Promise.all([
