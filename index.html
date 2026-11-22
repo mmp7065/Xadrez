@@ -451,8 +451,12 @@ body.in-game #game-app .player-info-stack .clock{min-width:66px;margin-left:auto
  body.in-game #game-app .playerbar.top,
  body.in-game #game-app .playerbar.bottom{display:none!important}
  body.in-game #game-app .player-info-stack{
-  display:flex!important;flex-direction:column!important;gap:10px!important;
-  margin-top:auto!important;padding-top:14px!important;border-top:1px solid #ffffff18!important;
+  grid-column:1!important;grid-row:2!important;display:flex!important;visibility:visible!important;opacity:1!important;
+  flex-direction:column!important;justify-content:flex-start!important;gap:10px!important;
+  width:100%!important;min-width:0!important;height:142px!important;min-height:142px!important;max-height:142px!important;
+  margin:0!important;padding:12px 14px!important;box-sizing:border-box!important;
+  align-self:stretch!important;overflow:hidden!important;background:#242321!important;
+  border:1px solid #ffffff18!important;border-left:0!important;border-bottom:0!important;border-radius:0 12px 0 0!important;
  }
  body.in-game #game-app .player-info-stack .playerbar{
   width:100%!important;min-height:58px!important;height:auto!important;flex:0 0 auto!important;
@@ -497,7 +501,10 @@ body.in-game #game-app .player-info-stack .clock{min-width:66px;margin-left:auto
 @media(min-width:901px){
  body.in-game #game-app .game-area{
   grid-template-rows:minmax(0,1fr) 142px!important;
+  grid-template-columns:clamp(245px,17vw,290px) minmax(0,1fr) clamp(245px,17vw,290px)!important;
  }
+ body.in-game #game-app .arena-info.left{grid-column:1!important;grid-row:1!important;min-height:0!important;height:100%!important;max-height:100%!important;overflow-y:auto!important;align-self:stretch!important}
+ body.in-game #game-app .player-info-stack{grid-column:1!important;grid-row:2!important;display:flex!important;width:100%!important;height:142px!important;min-height:142px!important;max-height:142px!important;margin:0!important;padding:12px 14px!important;box-sizing:border-box!important;background:#242321!important;align-self:stretch!important;overflow:hidden!important}
  body.in-game #game-app .player-info-stack{
   display:flex!important;visibility:visible!important;opacity:1!important;
   grid-column:1!important;grid-row:2!important;align-self:stretch!important;
