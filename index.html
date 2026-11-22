@@ -279,6 +279,30 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
 .square .piece-grade.grade-book{background:#a77c57!important}
 .square .piece-grade.grade-mate{background:#282828!important}
 
+
+/* Chess party: stable three-column arena; override legacy mobile stacking rules. */
+.game-area{display:grid!important;grid-template-columns:minmax(190px,250px) minmax(320px,1fr) minmax(190px,250px)!important;grid-template-rows:50px minmax(0,1fr) 58px!important;align-items:center;gap:8px!important;overflow:visible}
+.game-area>.playerbar.top{grid-column:2!important;grid-row:1!important}
+.game-area>.board-wrap{grid-column:2!important;grid-row:2!important;min-width:0}
+.game-area>.playerbar.bottom{grid-column:2!important;grid-row:3!important}
+.game-area>.arena-info.left{grid-column:1!important;grid-row:1/4!important;align-self:stretch!important;max-height:calc(100vh - 32px)!important}
+.game-area>.arena-info.right{grid-column:3!important;grid-row:1/4!important;align-self:stretch!important;max-height:calc(100vh - 32px)!important}
+.game-area>.god-tools{grid-column:3!important;grid-row:1/4!important;align-self:stretch!important;max-height:calc(100vh - 32px)!important;margin:0!important;overflow:auto}
+.game-area.party-host>.arena-info.left{grid-column:1!important}
+.game-area.party-host>.god-tools{grid-column:3!important}
+.game-area.party-guest>.arena-info.left{display:none!important}
+.game-area.party-guest>.arena-info.right{grid-column:3!important}
+.game-area.party-guest>.god-tools{display:none!important}
+.cheat-section{display:flex;flex-direction:column;gap:9px;padding:12px;margin:0 0 10px;background:#25212d;border:1px solid #8d6bd155;border-radius:9px}
+.cheat-section>b{color:#d6b9ff;font-size:12px;letter-spacing:.06em}
+.cheat-section small{color:#c6b8dc;font-size:11px;line-height:1.45}
+.cheat-section button{min-height:38px;border:1px solid #8d6bd1;background:#403451;color:#f1e9ff;border-radius:7px;cursor:pointer;font-weight:700}
+.cheat-section button.active{background:#7650a6;box-shadow:0 0 0 2px #c6a3f755}
+.god-tools{display:flex!important;flex-direction:column;gap:8px;min-width:0;padding:10px;background:#302e2b;border-radius:9px}
+.god-tools[hidden]{display:none!important}
+@media(max-width:900px){.game-area{grid-template-columns:165px minmax(280px,1fr) 165px!important;grid-template-rows:50px minmax(0,1fr) 58px!important;overflow-x:auto!important}.game-area>.arena-info.left{grid-column:1!important;grid-row:1/4!important}.game-area>.arena-info.right,.game-area>.god-tools{grid-column:3!important;grid-row:1/4!important}.game-area>.playerbar.top{grid-column:2!important;grid-row:1!important}.game-area>.board-wrap{grid-column:2!important;grid-row:2!important}.game-area>.playerbar.bottom{grid-column:2!important;grid-row:3!important}}
+@media(max-width:520px){.game-area{grid-template-columns:145px minmax(280px,1fr) 145px!important}.arena-info{font-size:10px!important;padding:7px!important}}
+
 </style>
 </head>
 <body>
@@ -336,7 +360,7 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
     <div class="board-wrap"><div class="board" id="board" aria-label="Tabuleiro de xadrez"></div><div class="move-feedback" id="move-feedback" role="status" aria-live="polite"><span class="feedback-symbol" id="feedback-symbol">✓</span><span class="feedback-copy"><b class="feedback-title" id="feedback-title">Melhor jogada!</b><span class="feedback-detail" id="feedback-detail">Stockfish · análise instantânea</span></span></div></div>
     <div class="god-tools">
         <button class="god-toggle" id="god-toggle" type="button">⚡ CHEAT: DESATIVADO</button>
-        <div class="cheat-section"><b>① SUBSTITUIR PEÇA</b><label>Cor<select id="god-color"><option value="w">Brancas</option><option value="b">Pretas</option></select></label><label>Peça para colocar<select id="god-piece"><option value="q">♕ Rainha</option><option value="r">♖ Torre</option><option value="b">♗ Bispo</option><option value="n">♘ Cavalo</option><option value="p">♙ Peão</option><option value="k">♔ Rei</option></select></label><small>Ative CHEAT e clique em qualquer casa: a peça escolhida será colocada ali, substituindo a peça existente.</small></div><div class="cheat-section"><b>② TROCAR FUNÇÃO</b><label>Nova função<select id="god-transform-piece"><option value="q">♕ Rainha</option><option value="r">♖ Torre</option><option value="b">♗ Bispo</option><option value="n">♘ Cavalo</option><option value="p">♙ Peão</option><option value="k">♔ Rei</option></select></label><button type="button" id="god-transform-start">Selecionar peça no tabuleiro</button><small id="god-transform-hint">Escolha a nova função e clique na peça que deseja transformar. A cor e a casa serão preservadas.</small></div>
+        <div class="cheat-section"><b>① CRIAR PEÇA</b><label>Cor<select id="god-color"><option value="w">Brancas</option><option value="b">Pretas</option></select></label><label>Peça para colocar<select id="god-piece"><option value="q">♕ Rainha</option><option value="r">♖ Torre</option><option value="b">♗ Bispo</option><option value="n">♘ Cavalo</option><option value="p">♙ Peão</option><option value="k">♔ Rei</option></select></label><small>Selecione a cor e a peça. Clique em CRIAR PEÇA para ativar; depois, cada casa clicada receberá essa peça. Desative para parar.</small></div><div class="cheat-section"><b>② TROCAR FUNÇÃO</b><label>Escolher uma peça<select id="god-transform-source"><option value="p">♙ Peão</option><option value="q">♕ Rainha</option><option value="r">♖ Torre</option><option value="b">♗ Bispo</option><option value="n">♘ Cavalo</option><option value="k">♔ Rei</option></select></label><label>Trocar por<select id="god-transform-piece"><option value="q">♕ Rainha</option><option value="r">♖ Torre</option><option value="b">♗ Bispo</option><option value="n">♘ Cavalo</option><option value="p">♙ Peão</option><option value="k">♔ Rei</option></select></label><button type="button" id="god-transform-start">Aplicar troca de função</button><small id="god-transform-hint">Escolha uma peça de origem e a função de destino. A peça mantém cor e casa, mas passa a usar os movimentos e habilidades da nova função.</small></div>
         <div class="god-hint" id="god-hint">🟢 Círculo verde: movimento permitido · 🔴 círculo vermelho: movimento ilegal (peça cravada ou rei exposto).<br>Ative o CHEAT e clique em qualquer casa para colocar a peça escolhida. A peça que já estiver na casa será substituída.</div>
       </div>
     <div class="arena-info right" id="arena-info-right"><strong>VEZ E HISTÓRICO</strong><div class="arena-turn" id="arena-turn-right">Aguardando partida</div><div class="arena-moves" id="arena-moves-right"></div><strong>ANÁLISES</strong><div class="arena-analysis" id="arena-analysis-right">As análises aparecerão aqui.</div></div>
@@ -399,7 +423,7 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
  let user=null,savedGameId=null,saveQueue=Promise.resolve(),isBotThinking=false,authMode='login',partyId=null,partyData=null,partyChannel=null,onlineColor=null,onlineGameId=null,onlineBusy=false,pendingRematchRequest=null,moveGrades={},lastMoveGrade=null,feedbackTimer=null,liveAnalysisQueue=Promise.resolve();
  let game=null,selected=null,legal=[],illegal=[],flipped=false,started=false,clockTimer=null,whiteTime=600,blackTime=600,clockOn=false,godMode=false,premoveQueue=[],premoveDraft=null;
  let replayMode=false,replayBaseFen=null,replaySans=[],replayIndex=0,replayTimer=null;
- let godToolAction='replace';
+ let godToolAction='replace',godCreateActive=false;
  const files='abcdefgh';
  const pieceName={p:'peão',n:'cavalo',b:'bispo',r:'torre',q:'dama',k:'rei'};
  function init(){
@@ -664,8 +688,8 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
   ch.subscribe(status=>{if(status==='CHANNEL_ERROR'||status==='TIMED_OUT')console.warn('Site Realtime connection:',status);});
  }
  async function summonPiece(square){
-  const action=godToolAction,existing=game.get(square),color=action==='transform'?(existing?.color||'w'):document.getElementById('god-color').value,type=action==='transform'?document.getElementById('god-transform-piece').value:document.getElementById('god-piece').value;
-  if(action==='transform'&&!existing){setStatus('Clique numa casa que contenha a peça que deseja transformar.','check');return;}
+  const action=godToolAction,existing=game.get(square),color=action==='transform'?(existing?.color||'w'):document.getElementById('god-color').value,type=action==='transform'?document.getElementById('god-transform-piece').value:document.getElementById('god-piece').value,sourceType=document.getElementById('god-transform-source').value;
+  if(action==='transform'&&(!existing||existing.type!==sourceType)){setStatus('Escolha uma peça '+pieceName[sourceType]+' para aplicar a troca.','check');return;}
   if(document.getElementById('game-mode').value==='online'){
    if(!partyData||partyData.party?.host_user_id!==user?.id){setStatus('Somente o anfitrião pode usar o CHEAT.','check');return;}
    try{setStatus('Aplicando alteração do CHEAT…');const result=await partyRequest('god_edit',{square,color,pieceType:type,editAction:action});game=new Chess(result.fen);selected=null;legal=[];illegal=[];render();setStatus(glyph[color+type]+' '+pieceName[type].toUpperCase()+' colocado em '+square.toUpperCase()+'. Alteração sincronizada para os dois jogadores.');}
@@ -692,7 +716,10 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
  document.getElementById('cancel-premove').onclick=()=>{premoveQueue=[];premoveDraft=null;selected=null;legal=[];illegal=[];render();setStatus('Todos os pré-moves foram cancelados.');};
  document.getElementById('undo-btn').onclick=()=>{if(!game||!game.history().length)return;game.undo();started=true;document.body.classList.add('playing');selected=null;legal=[];illegal=[];render();};
  document.getElementById('flip-btn').onclick=()=>{flipped=!flipped;render();};
- document.getElementById('god-transform-start').onclick=()=>{godToolAction='transform';document.getElementById('god-transform-hint').textContent='Clique agora na peça. A cor e a casa serão preservadas.';setStatus('Selecione a peça que deseja transformar.');};document.getElementById('god-color').onchange=()=>godToolAction='replace';document.getElementById('god-piece').onchange=()=>godToolAction='replace';
+ document.getElementById('god-transform-start').onclick=()=>{godToolAction='transform';document.getElementById('god-transform-start').classList.add('active');document.getElementById('god-transform-hint').textContent='Clique em uma peça do tipo escolhido em “Escolher uma peça”.';setStatus('Selecione uma peça '+pieceName[document.getElementById('god-transform-source').value]+'.');};
+ document.getElementById('god-color').onchange=()=>{godToolAction='replace';};
+ document.getElementById('god-piece').onchange=()=>{godToolAction='replace';};
+ 
  document.getElementById('god-toggle').onclick=()=>{
   if(document.getElementById('game-mode').value==='online'&&(!partyData||partyData.party?.host_user_id!==user?.id)){setStatus('Somente o anfitrião pode ativar o CHEAT.','check');return;}
   godMode=!godMode;selected=null;legal=[];illegal=[];
@@ -716,7 +743,7 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
  function renderParty(state){
   partyData=state;partyId=state.party.id;document.getElementById('party-lobby').hidden=false;
   document.getElementById('party-code-display').textContent=state.party.code;document.getElementById('party-member-count').textContent=(state.members||[]).length+'/2';
-  const host=state.party.host_user_id===user.id;document.getElementById('arena-info-left').hidden=!host;document.getElementById('arena-info-right').hidden=host;const waiting=state.party.status==='waiting',settings=document.getElementById('party-settings');const cheatPanel=document.querySelector('.god-tools');cheatPanel.hidden=!(host&&state.party.status==='in_game');settings.hidden=!host;document.getElementById('party-guest-settings').hidden=host;const ownMember=(state.members||[]).find(m=>m.user_id===user.id);if(!host&&ownMember){document.getElementById('party-guest-color').value=ownMember.color_preference||'random';document.getElementById('party-guest-color').disabled=!waiting;document.getElementById('party-save-color').disabled=!waiting;}
+  const host=state.party.host_user_id===user.id;document.querySelector('.game-area').classList.toggle('party-host',host);document.querySelector('.game-area').classList.toggle('party-guest',!host);document.getElementById('arena-info-left').hidden=!host;document.getElementById('arena-info-right').hidden=host;const waiting=state.party.status==='waiting',settings=document.getElementById('party-settings');const cheatPanel=document.querySelector('.god-tools');cheatPanel.hidden=!(host&&state.party.status==='in_game');settings.hidden=!host;document.getElementById('party-guest-settings').hidden=host;const ownMember=(state.members||[]).find(m=>m.user_id===user.id);if(!host&&ownMember){document.getElementById('party-guest-color').value=ownMember.color_preference||'random';document.getElementById('party-guest-color').disabled=!waiting;document.getElementById('party-save-color').disabled=!waiting;}
   if(host){document.getElementById('party-edit-time').value=String(state.party.time_control_seconds??600);document.getElementById('party-edit-color').value=state.party.color_preference||'random';document.getElementById('party-edit-time').disabled=!waiting;document.getElementById('party-edit-color').disabled=!waiting;document.getElementById('party-save-settings').disabled=!waiting;document.getElementById('party-settings-lock').textContent=waiting?'EDITÁVEL':'🔒 Partida iniciada';}
   document.getElementById('party-members').innerHTML=(state.members||[]).map(m=>{const p=m.profile||{},name=escapeHtml(p.display_name||p.username||'Jogador');return '<div class="party-member"><div class="member-avatar">♟</div><div class="member-info"><strong>'+name+(m.user_id===user.id?' (Você)':'')+'</strong><small>'+(m.assigned_color?('Joga de '+(m.assigned_color==='white'?'brancas':'pretas')):('Preferência: '+(m.color_preference==='random'?'aleatória':m.color_preference==='white'?'brancas':'pretas')) )+'</small></div><span class="member-tag">'+(m.role==='host'?'♛ ANFITRIÃO':'● CONVIDADO')+'</span></div>';}).join('')+(state.members.length<2?'<div class="party-member"><div class="member-avatar">＋</div><div class="member-info"><strong>Aguardando amigo</strong><small>Compartilhe o código para ele entrar.</small></div></div>':'');
   document.getElementById('party-start').hidden=!host;document.getElementById('party-start').disabled=!host||state.members.length!==2||!waiting;document.getElementById('party-enter-game').hidden=state.party.status!=='in_game';
