@@ -878,7 +878,7 @@ body.in-game #game-app .god-hint{font-size:11px;line-height:1.5}
  if(!notice?.fen||!document.body.classList.contains('in-game'))return;
  const previousFen=game.fen();let appliedMove=null;
  if(game.fen()!==notice.fen){let ok=false;try{appliedMove=game.move({from:notice.from,to:notice.to,promotion:notice.promotion||'q'});ok=!!appliedMove&&game.fen()===notice.fen;}catch{}if(!ok){game=new Chess(notice.fen);appliedMove=null;}}
- if(appliedMove)queueLiveMoveAnalysis(previousFen,game.fen(),appliedMove,game.history({verbose:true}).length);
+ if(appliedMove)queueLiveMoveAnalysis(previousFen,game.fen(),appliedMove,game.history({verbose:true}).length);if(notice.visualPositions)visualPositions=notice.visualPositions;if(notice.pieceAbilities)pieceAbilities=notice.pieceAbilities;
  render();if(notice.color==='white'&&clockOn)whiteTime=Math.max(0,Number(notice.clockRemainingSeconds)||whiteTime);if(notice.color==='black'&&clockOn)blackTime=Math.max(0,Number(notice.clockRemainingSeconds)||blackTime);
  if(notice.status==='finished'||game.game_over()){started=false;clearInterval(clockTimer);premoveQueue=[];premoveDraft=null;render();showResultModal(notice.result,notice.termination);return;}
  setStatus(game.turn()===(onlineColor==='white'?'w':'b')?'Sua vez!':'Vez do adversário.');if(clockOn)startClock();if(game.turn()===(onlineColor==='white'?'w':'b')&&premoveQueue.length)setTimeout(consumePremoveQueue,0);
