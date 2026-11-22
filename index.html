@@ -424,7 +424,7 @@ body.in-game #game-app .god-hint{font-size:11px;line-height:1.5}
 </div>
     <div class="board-wrap"><div class="board" id="board" aria-label="Tabuleiro de xadrez"></div><div class="move-feedback" id="move-feedback" role="status" aria-live="polite"><span class="feedback-symbol" id="feedback-symbol">✓</span><span class="feedback-copy"><b class="feedback-title" id="feedback-title">Melhor jogada!</b><span class="feedback-detail" id="feedback-detail">Stockfish · análise instantânea</span></span></div></div>
     <div class="god-tools">
-        <button class="god-toggle" id="god-toggle" type="button">⚡ CHEAT: DESATIVADO</button>
+        <button class="god-toggle" id="god-toggle" type="button">✚ ATIVAR CRIAÇÃO DE PEÇA</button>
         <div class="cheat-section"><b>① CRIAR PEÇA</b><label>Cor<select id="god-color"><option value="w">Brancas</option><option value="b">Pretas</option></select></label><label>Peça para colocar<select id="god-piece"><option value="q">♕ Rainha</option><option value="r">♖ Torre</option><option value="b">♗ Bispo</option><option value="n">♘ Cavalo</option><option value="p">♙ Peão</option><option value="k">♔ Rei</option></select></label><small>Selecione a cor e a peça. Clique em CRIAR PEÇA para ativar; depois, cada casa clicada receberá essa peça. Desative para parar.</small></div><div class="cheat-section"><b>② TROCAR FUNÇÃO</b><label>Escolher uma peça<select id="god-transform-source"><option value="p">♙ Peão</option><option value="q">♕ Rainha</option><option value="r">♖ Torre</option><option value="b">♗ Bispo</option><option value="n">♘ Cavalo</option><option value="k">♔ Rei</option></select></label><label>Trocar por<select id="god-transform-piece"><option value="q">♕ Rainha</option><option value="r">♖ Torre</option><option value="b">♗ Bispo</option><option value="n">♘ Cavalo</option><option value="p">♙ Peão</option><option value="k">♔ Rei</option></select></label><button type="button" id="god-transform-start">Aplicar troca de função</button><small id="god-transform-hint">A troca é GLOBAL: todas as peças do tipo escolhido serão convertidas para o novo tipo, mantendo cor e posição.</small></div>
         <div class="god-hint" id="god-hint">🟢 Círculo verde: movimento permitido · 🔴 círculo vermelho: movimento ilegal (peça cravada ou rei exposto).<br>Ative o CHEAT e clique em qualquer casa para colocar a peça escolhida. A peça que já estiver na casa será substituída.</div>
       </div>
@@ -805,8 +805,8 @@ body.in-game #game-app .god-hint{font-size:11px;line-height:1.5}
   if(document.getElementById('game-mode').value==='online'&&(!partyData||partyData.party?.host_user_id!==user?.id)){setStatus('Somente o anfitrião pode ativar o CHEAT.','check');return;}
   godMode=!godMode;godCreateActive=godMode;godToolAction='replace';selected=null;legal=[];illegal=[];
   const b=document.getElementById('god-toggle');b.classList.toggle('active',godMode);
-  b.textContent=godMode?'✚ CRIAR PEÇA: ATIVO':'✚ CRIAR PEÇA';
-  document.getElementById('god-hint').textContent=godMode?'Modo criar peça ativo: clique nas casas para inserir a peça escolhida. Clique novamente para encerrar.':'Escolha cor e peça e pressione CRIAR PEÇA para começar.';
+  b.textContent=godMode?'✚ CRIAÇÃO DE PEÇA ATIVA':'✚ ATIVAR CRIAÇÃO DE PEÇA';
+  document.getElementById('god-hint').textContent=godMode?'Modo criar peça ativo: clique nas casas para inserir a peça escolhida. Clique novamente para encerrar.':'Escolha a cor e o tipo de peça e pressione ATIVAR CRIAÇÃO DE PEÇA. Depois clique nas casas para inserir; pressione novamente para encerrar.';
   if(godMode){started=true;document.body.classList.add('playing');setStatus('Criar peça ativado. Clique nas casas desejadas; cada clique cria a peça selecionada.');}
   else setStatus('Criação de peças desativada.');
   render();
