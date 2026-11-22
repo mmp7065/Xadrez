@@ -53,7 +53,7 @@ function applyVisualMove(visual: Record<string,string>, from: string, to: string
     const rank=from[1],rookFrom=move.flags.includes("k")?"h"+rank:"a"+rank,rookTo=move.flags.includes("k")?"f"+rank:"d"+rank;
     if(next[rookFrom]){next[rookTo]=next[rookFrom];delete next[rookFrom];}else next[rookTo]="r";
   }
-  next[to]=move.promotion||moving;return next;
+  next[to]=(moving==="p"&&move.promotion)?move.promotion:moving;return next;
 }
 
 async function partyState(partyId: string) {
