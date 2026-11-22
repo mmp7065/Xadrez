@@ -403,6 +403,69 @@ body.in-game #game-app .player-info-stack .clock{min-width:66px;margin-left:auto
 
 
 @media(min-width:721px){body.in-game #game-app .game-area.party-guest>.arena-info.left{display:flex!important;grid-column:3!important}body.in-game #game-app .game-area.party-guest>.arena-info.right{display:none!important}}
+
+/* Chess arena layout v2: edge-anchored side panels with a spacious centered board. */
+@media(min-width:901px){
+ body.in-game{overflow:hidden}
+ body.in-game #game-app{
+  width:100vw!important;max-width:none!important;height:100dvh!important;min-height:0!important;
+  margin:0!important;padding:14px 0!important;gap:0!important;
+  display:block!important;
+ }
+ body.in-game #game-app .game-area{
+  width:100%!important;height:calc(100dvh - 28px)!important;min-height:0!important;
+  margin:0!important;padding:0!important;
+  display:grid!important;
+  grid-template-columns:minmax(230px,clamp(230px,19vw,310px)) minmax(0,1fr) minmax(230px,clamp(230px,19vw,310px))!important;
+  grid-template-rows:minmax(0,1fr)!important;
+  column-gap:clamp(14px,2vw,32px)!important;row-gap:0!important;
+  align-items:stretch!important;overflow:hidden!important;
+ }
+ body.in-game #game-app .arena-info.left,
+ body.in-game #game-app .arena-info.right,
+ body.in-game #game-app .god-tools{
+  grid-row:1!important;align-self:stretch!important;justify-self:stretch!important;
+  width:100%!important;min-width:0!important;height:100%!important;max-height:none!important;
+  margin:0!important;padding:14px!important;border-radius:0 12px 12px 0!important;
+  overflow-y:auto!important;overflow-x:hidden!important;
+ }
+ body.in-game #game-app .arena-info.left{grid-column:1!important}
+ body.in-game #game-app .arena-info.right{grid-column:3!important;border-radius:12px 0 0 12px!important}
+ body.in-game #game-app .god-tools{grid-column:3!important;border-radius:12px 0 0 12px!important}
+ body.in-game #game-app .game-area.party-host .arena-info.left{grid-column:1!important}
+ body.in-game #game-app .game-area.party-host .god-tools{grid-column:3!important}
+ body.in-game #game-app .game-area.party-guest .arena-info.left{display:none!important}
+ body.in-game #game-app .game-area.party-guest .arena-info.right{display:flex!important;grid-column:3!important}
+ body.in-game #game-app .game-area.party-guest .god-tools{display:none!important}
+ body.in-game #game-app .board-wrap{
+  grid-column:2!important;grid-row:1!important;justify-self:center!important;align-self:center!important;
+  width:min(100%,calc(100dvh - 76px))!important;max-width:none!important;
+  max-height:calc(100dvh - 76px)!important;aspect-ratio:1!important;margin:0!important;
+ }
+ body.in-game #game-app .board .piece,
+ body.in-game #game-app .board .piece img{font-size:clamp(28px,5.4vmin,66px)!important}
+ body.in-game #game-app .playerbar.top,
+ body.in-game #game-app .playerbar.bottom{display:none!important}
+ body.in-game #game-app .player-info-stack{
+  display:flex!important;flex-direction:column!important;gap:10px!important;
+  margin-top:auto!important;padding-top:14px!important;border-top:1px solid #ffffff18!important;
+ }
+ body.in-game #game-app .player-info-stack .playerbar{
+  width:100%!important;min-height:58px!important;height:auto!important;flex:0 0 auto!important;
+  margin:0!important;padding:9px 10px!important;display:flex!important;gap:10px!important;
+  background:#302e2b!important;border:1px solid #ffffff18!important;border-radius:9px!important;
+ }
+ body.in-game #game-app .player-info-stack .avatar{width:38px!important;height:38px!important;flex-basis:38px!important;font-size:27px!important}
+ body.in-game #game-app .player-info-stack .player-meta{display:flex!important;flex:1!important;min-width:0!important;flex-direction:column!important;align-items:flex-start!important;gap:3px!important}
+ body.in-game #game-app .player-info-stack .clock{min-width:76px!important;padding:7px 8px!important;font-size:20px!important}
+ body.in-game #game-app .arena-turn{min-height:42px!important;padding:11px!important;font-size:13px!important}
+ body.in-game #game-app .arena-info strong{font-size:11px!important}
+}
+@media(min-width:901px) and (max-width:1150px){
+ body.in-game #game-app .game-area{grid-template-columns:220px minmax(0,1fr) 220px!important;column-gap:12px!important}
+ body.in-game #game-app .arena-info,body.in-game #game-app .god-tools{padding:10px!important}
+}
+
 </style>
 </head>
 <body>
