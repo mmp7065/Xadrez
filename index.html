@@ -928,12 +928,40 @@ body.in-game #game-app .player-info-stack .clock{min-width:66px;margin-left:auto
  document.getElementById('undo-btn').onclick=()=>{if(!game||!game.history().length)return;game.undo();started=true;document.body.classList.add('playing');selected=null;legal=[];illegal=[];render();};
  document.getElementById('flip-btn').onclick=()=>{flipped=!flipped;render();};
  document.getElementById('god-transform-start').onclick=async()=>{
-  if(document.getElementById('game-mode').value!=='online'||!partyData||partyData.party?.host_user_id!==user?.id){setStatus('A troca de habilidades está disponível para o anfitrião durante uma festa online.','check');return;}
-  const sourcePiece=document.getElementById('god-transform-source').value,abilityPiece=document.getElementById('god-transform-piece').value,targetColor=onlineColor==='white'?'white':'black',hint=document.getElementById('god-transform-hint'),button=document.getElementById('god-transform-start');
-  document.getElementById('god-transform-team').textContent='Equipe afetada: '+(targetColor==='white'?'brancas':'pretas')+' (sua equipe)';button.disabled=true;hint.textContent='Salvando regra de movimento…';
-  try{const result=await partyRequest('set_ability',{targetColor,sourcePiece,abilityPiece});game=new Chess(result.fen);pieceAbilities=result.pieceAbilities||pieceAbilities;visualPositions=result.visualPositions||visualPositions;selected=null;legal=[];illegal=[];premoveQueue=[];premoveDraft=null;render();button.classList.add('active');hint.textContent=abilityPiece===sourcePiece?'Habilidade original restaurada para seus '+pieceName[sourcePiece]+'s.':'Somente seus '+pieceName[sourcePiece]+'s agora se movimentam e capturam como '+pieceName[abilityPiece]+'s. As imagens continuam iguais.';setStatus('Troca aplicada somente às '+(targetColor==='white'?'brancas':'pretas')+'.');}
-  catch(error){hint.textContent='Falha: '+error.message;setStatus('Não foi possível trocar a função: '+error.message,'check');}
-  finally{button.disabled=false;}
+  const button=document.getElementById('god-transform-start');
+  const hint=document.getElementById('god-transform-hint');
+  if(button.disabled)return;
+  if(document.getElementById('game-mode').value!=='online'||!partyId||!partyData?.party||partyData.party.host_user_id!==user?.id){
+   setStatus('A troca de habilidades está disponível para o anfitrião durante uma festa online.','check');
+   hint.textContent='Entre em uma festa como anfitrião para usar esta ferramenta.';
+   return;
+  }
+  const sourcePiece=document.getElementById('god-transform-source').value;
+  const abilityPiece=document.getElementById('god-transform-piece').value;
+  const targetColor=onlineColor;
+  if(!['white','black'].includes(targetColor)){
+   setStatus('Não foi possível identificar sua equipe nesta festa.','check');
+   return;
+  }
+  document.getElementById('god-transform-team').textContent='Equipe afetada: '+(targetColor==='white'?'brancas':'pretas')+' (sua equipe)';
+  button.disabled=true;button.classList.remove('active');hint.textContent='Aplicando troca de habilidade…';
+  try{
+   const result=await partyRequest('set_ability',{targetColor,sourcePiece,abilityPiece});
+   if(!result?.fen||!result?.pieceAbilities)throw new Error('O servidor não confirmou a alteração das habilidades.');
+   game=new Chess(result.fen);
+   pieceAbilities=result.pieceAbilities;
+   visualPositions=result.visualPositions||visualPositions;
+   selected=null;legal=[];illegal=[];premoveQueue=[];premoveDraft=null;
+   render();renderMoves();
+   button.classList.add('active');
+   hint.textContent=abilityPiece===sourcePiece
+    ?'Habilidade original restaurada para seus '+pieceName[sourcePiece]+'s.'
+    :'Somente seus '+pieceName[sourcePiece]+'s agora se movimentam e capturam como '+pieceName[abilityPiece]+'s. A aparência continua igual.';
+   setStatus('Troca aplicada somente às '+(targetColor==='white'?'brancas':'pretas')+'.');
+  }catch(error){
+   hint.textContent='Falha ao aplicar a troca: '+error.message;
+   setStatus('Não foi possível trocar a função: '+error.message,'check');
+  }finally{button.disabled=false;}
  };
  document.getElementById('god-color').onchange=()=>{godToolAction='replace';};
  document.getElementById('god-piece').onchange=()=>{godToolAction='replace';};
