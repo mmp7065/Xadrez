@@ -70,8 +70,9 @@ async function partyState(partyId: string) {
     // Estado CHEAT é pequeno e carregado junto da festa; evita consultas por casa/lance.
     const { data: cheatState } = await admin.from("chess_party_cheat_state").select("piece_abilities,visual_positions,game_id,updated_at").eq("party_id",partyId).maybeSingle();
     const initialFen=String(game?.final_fen||game?.initial_fen||"");
-    const visualPositions=cheatState?.visual_positions && Object.keys(cheatState.visual_positions).length ? cheatState.visual_positions : visualMapFromFen(initialFen);
-    game = game ? { ...game, piece_abilities: cheatState?.piece_abilities || {white:{},black:{}}, visual_positions: visualPositions } : game;
+    const validCheatState=cheatState?.game_id===party.game_id?cheatState:null;
+    const visualPositions=validCheatState?.visual_positions && Object.keys(validCheatState.visual_positions).length ? validCheatState.visual_positions : visualMapFromFen(initialFen);
+    game = game ? { ...game, piece_abilities: validCheatState?.piece_abilities || {white:{},black:{}}, visual_positions: visualPositions } : game;
     // Histórico é carregado separadamente; não buscar todos os lances a cada atualização.
     moves = [];
   }
@@ -276,27 +277,33 @@ Deno.serve(async (req) => {
       const { data: party } = await admin.from("chess_parties").select("game_id,status,host_user_id").eq("id", partyId).single();
       if (!party?.game_id || party.status !== "in_game") throw new Error("O Modo Deus só funciona durante uma partida ativa.");
       if (party.host_user_id !== user.id || member.role !== "host") throw new Error("Somente o anfitrião pode usar o Modo Deus.");
-      const square = String(body.square || ""), color = String(body.color || ""), type = String(body.pieceType || ""), sourcePieceType = String(body.sourcePieceType || ""), editAction = String(body.editAction || "replace");
-      if (!/^[a-h][1-8]$/.test(square) || !["w","b"].includes(color) || !["p","n","b","r","q","k"].includes(type)) throw new Error("Peça ou casa inválida.");
-      const { data: row, error: readError } = await admin.from("games").select("id,final_fen,initial_fen").eq("id", party.game_id).single();
-      if (readError || !row) throw new Error("Não foi possível carregar o tabuleiro.");
-      const fen = String(row.final_fen || row.initial_fen || "");
-      const fields = fen.split(" ");
-      if (fields.length < 4) throw new Error("Posição atual inválida.");
-      const ranks = fields[0].split("/");
-      const rankIndex = 8 - Number(square[1]), fileIndex = square.charCodeAt(0) - 97;
-      const decode = (rank: string) => { const out: string[] = []; for (const ch of rank) { if (/^[1-8]$/.test(ch)) for (let n=0;n<Number(ch);n++) out.push(""); else out.push(ch); } return out; };
-      const encode = (cells: string[]) => { let out="",empty=0; for (const cell of cells) { if (!cell) empty++; else { if (empty) out+=empty; out+=cell; empty=0; } } if (empty) out+=empty; return out; };
-      const board = ranks.map(decode);
-      if (board.length !== 8 || board.some(r => r.length !== 8)) throw new Error("Estrutura do tabuleiro inválida.");
-      if (type === "k") for (let r=0;r<8;r++) for(let c=0;c<8;c++) if(board[r][c] === (color==="w"?"K":"k")) board[r][c]="";
-      if (editAction === "transform") throw new Error("Use a ferramenta Trocar função: ela altera somente as habilidades da sua equipe, sem substituir as imagens."); else { if (type === "k") for (let r=0;r<8;r++) for(let c=0;c<8;c++) if(board[r][c] === (color==="w"?"K":"k")) board[r][c]=""; board[rankIndex][fileIndex] = color === "w" ? type.toUpperCase() : type; }
-      fields[0] = board.map(encode).join("/");
-      const updatedFen = fields.join(" ");
-      const { error: updateError } = await admin.from("games").update({ final_fen: updatedFen }).eq("id", party.game_id);
-      if (updateError) throw updateError;
-      await notifyParty(partyId, "board_overridden", { gameId: party.game_id, fen: updatedFen, square, color, pieceType: type, changedBy: user.id });
-      return json({ ok: true, fen: updatedFen });
+      const square=String(body.square||""),color=String(body.color||""),type=String(body.pieceType||""),editAction=String(body.editAction||"replace");
+      if(editAction!=="replace")throw new Error("Troca de função deve usar a ferramenta específica de habilidades.");
+      if(!/^[a-h][1-8]$/.test(square)||!["w","b"].includes(color)||!["p","n","b","r","q","k"].includes(type))throw new Error("Peça ou casa inválida.");
+      const {data:row,error:readError}=await admin.from("games").select("id,final_fen,initial_fen").eq("id",party.game_id).single();
+      if(readError||!row)throw new Error("Não foi possível carregar o tabuleiro.");
+      const currentFen=String(row.final_fen||row.initial_fen),{data:existing}=await admin.from("chess_party_cheat_state").select("*").eq("party_id",partyId).maybeSingle();
+      const abilities:AbilityMap=existing?.game_id===party.game_id?(existing.piece_abilities||{white:{},black:{}}):{white:{},black:{}};
+      const visual=existing?.game_id===party.game_id&&existing.visual_positions&&Object.keys(existing.visual_positions).length?existing.visual_positions:visualMapFromFen(currentFen);
+      const visualFen=mapEngineFen(currentFen,{white:{},black:{}},visual),parts=visualFen.split(" "),rows=parts[0].split("/");
+      const rankIndex=8-Number(square[1]),fileIndex=square.charCodeAt(0)-97;
+      const decode=(rank:string)=>{const out:string[]=[];for(const ch of rank){if(/^[1-8]$/.test(ch))for(let n=0;n<Number(ch);n++)out.push("");else out.push(ch);}return out;};
+      const board=rows.map(decode);
+      if(board.length!==8||board.some(r=>r.length!==8))throw new Error("Estrutura do tabuleiro inválida.");
+      if(type==="k")for(let r=0;r<8;r++)for(let c=0;c<8;c++)if(board[r][c]===(color==="w"?"K":"k"))board[r][c]="";
+      board[rankIndex][fileIndex]=color==="w"?type.toUpperCase():type;
+      const encode=(cells:string[])=>{let out="",empty=0;for(const cell of cells){if(!cell)empty++;else{if(empty)out+=empty;out+=cell;empty=0;}}if(empty)out+=empty;return out;};
+      parts[0]=board.map(encode).join("/");
+      const nextVisualFen=parts.join(" "),nextVisual={...visual,[square]:type};
+      const nextFen=mapEngineFen(nextVisualFen,abilities,nextVisual);
+      const {error:updateError}=await admin.from("games").update({final_fen:nextFen}).eq("id",party.game_id);
+      if(updateError)throw updateError;
+      const {error:stateError}=await admin.from("chess_party_cheat_state").upsert({party_id:partyId,game_id:party.game_id,piece_abilities:abilities,visual_positions:nextVisual,created_by:user.id,updated_by:user.id,updated_at:new Date().toISOString()},{onConflict:"party_id"});
+      if(stateError)throw stateError;
+      const {error:logError}=await admin.from("chess_party_cheat_actions").insert({party_id:partyId,game_id:party.game_id,actor_user_id:user.id,action_type:"create_piece",target_color:color==="w"?"white":"black",ability_piece:type,square,payload:{visual_piece:type}});
+      if(logError)throw logError;
+      await notifyParty(partyId,"board_overridden",{gameId:party.game_id,fen:nextFen,square,color,pieceType:type,visualPositions:nextVisual,pieceAbilities:abilities,changedBy:user.id});
+      return {ok:true,fen:nextFen,visualPositions:nextVisual,pieceAbilities:abilities};
     }
     if (action === "move") {
       const { data: party } = await admin.from("chess_parties").select("game_id,status").eq("id", partyId).single();
