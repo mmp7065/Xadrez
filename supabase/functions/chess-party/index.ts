@@ -213,6 +213,32 @@ Deno.serve(async (req) => {
       await notifyParty(partyId, "player_left", { userId: user.id });
       return json({ ok: true });
     }
+    if (action === "god_edit") {
+      const { data: party } = await admin.from("chess_parties").select("game_id,status,host_user_id").eq("id", partyId).single();
+      if (!party?.game_id || party.status !== "in_game") throw new Error("O Modo Deus só funciona durante uma partida ativa.");
+      if (party.host_user_id !== user.id || member.role !== "host") throw new Error("Somente o anfitrião pode usar o Modo Deus.");
+      const square = String(body.square || ""), color = String(body.color || ""), type = String(body.pieceType || "");
+      if (!/^[a-h][1-8]$/.test(square) || !["w","b"].includes(color) || !["p","n","b","r","q","k"].includes(type)) throw new Error("Peça ou casa inválida.");
+      const { data: row, error: readError } = await admin.from("games").select("id,final_fen,initial_fen").eq("id", party.game_id).single();
+      if (readError || !row) throw new Error("Não foi possível carregar o tabuleiro.");
+      const fen = String(row.final_fen || row.initial_fen || "");
+      const fields = fen.split(" ");
+      if (fields.length < 4) throw new Error("Posição atual inválida.");
+      const ranks = fields[0].split("/");
+      const rankIndex = 8 - Number(square[1]), fileIndex = square.charCodeAt(0) - 97;
+      const decode = (rank: string) => { const out: string[] = []; for (const ch of rank) { if (/^[1-8]$/.test(ch)) for (let n=0;n<Number(ch);n++) out.push(""); else out.push(ch); } return out; };
+      const encode = (cells: string[]) => { let out="",empty=0; for (const cell of cells) { if (!cell) empty++; else { if (empty) out+=empty; out+=cell; empty=0; } } if (empty) out+=empty; return out; };
+      const board = ranks.map(decode);
+      if (board.length !== 8 || board.some(r => r.length !== 8)) throw new Error("Estrutura do tabuleiro inválida.");
+      if (type === "k") for (let r=0;r<8;r++) for(let c=0;c<8;c++) if(board[r][c] === (color==="w"?"K":"k")) board[r][c]="";
+      board[rankIndex][fileIndex] = color === "w" ? type.toUpperCase() : type;
+      fields[0] = board.map(encode).join("/");
+      const updatedFen = fields.join(" ");
+      const { error: updateError } = await admin.from("games").update({ final_fen: updatedFen }).eq("id", party.game_id);
+      if (updateError) throw updateError;
+      await notifyParty(partyId, "board_overridden", { gameId: party.game_id, fen: updatedFen, square, color, pieceType: type, changedBy: user.id });
+      return json({ ok: true, fen: updatedFen });
+    }
     if (action === "move") {
       const { data: party } = await admin.from("chess_parties").select("game_id,status").eq("id", partyId).single();
       if (!party?.game_id || party.status !== "in_game") throw new Error("A partida não está ativa.");
