@@ -257,8 +257,9 @@ Deno.serve(async (req) => {
       const { data: row, error: readError } = await admin.from("games").select("id,final_fen,initial_fen").eq("id",party.game_id).single();
       if(readError||!row)throw new Error("Não foi possível carregar o tabuleiro.");
       const currentFen=String(row.final_fen||row.initial_fen),{data:existing}=await admin.from("chess_party_cheat_state").select("*").eq("party_id",partyId).maybeSingle();
-      const visual=existing?.visual_positions&&Object.keys(existing.visual_positions).length?existing.visual_positions:visualMapFromFen(currentFen);
-      const abilities:AbilityMap=existing?.piece_abilities||{white:{},black:{}};
+      const validExisting=existing?.game_id===party.game_id?existing:null;
+      const visual=validExisting?.visual_positions&&Object.keys(validExisting.visual_positions).length?validExisting.visual_positions:visualMapFromFen(currentFen);
+      const abilities:AbilityMap=validExisting?.piece_abilities||{white:{},black:{}};
       const nextAbilities:AbilityMap={white:{...(abilities.white||{})},black:{...(abilities.black||{})}};
       if(abilityPiece===sourcePiece)delete nextAbilities[targetColor][sourcePiece];else nextAbilities[targetColor][sourcePiece]=abilityPiece;
       const nextFen=mapEngineFen(currentFen,nextAbilities,visual);
@@ -319,12 +320,11 @@ Deno.serve(async (req) => {
       if (!/^[a-h][1-8]$/.test(from) || !/^[a-h][1-8]$/.test(to)) throw new Error("Movimento inválido.");
       const result = chess.move({ from, to, promotion: body.promotion || "q" });
       if (!result) throw new Error("Esse movimento não é permitido.");
-      const {data:cheatState}=await admin.from("chess_party_cheat_state").select("piece_abilities,visual_positions").eq("party_id",partyId).maybeSingle();
-      const visualBefore=cheatState?.visual_positions&&Object.keys(cheatState.visual_positions).length?cheatState.visual_positions:visualMapFromFen(expectedFen);
+      const {data:cheatState}=await admin.from("chess_party_cheat_state").select("piece_abilities,visual_positions,game_id").eq("party_id",partyId).maybeSingle();
+      const validCheatState=cheatState?.game_id===party.game_id?cheatState:null;
+      const visualBefore=validCheatState?.visual_positions&&Object.keys(validCheatState.visual_positions).length?validCheatState.visual_positions:visualMapFromFen(expectedFen);
       const visualAfter=applyVisualMove(visualBefore,from,to,result);
-      const abilities:AbilityMap=cheatState?.piece_abilities||{white:{},black:{}};
-      const {error:visualError}=await admin.from("chess_party_cheat_state").upsert({party_id:partyId,game_id:party.game_id,piece_abilities:abilities,visual_positions:visualAfter,created_by:user.id,updated_by:user.id,updated_at:new Date().toISOString()},{onConflict:"party_id"});
-      if(visualError)throw visualError;
+      const abilities:AbilityMap=validCheatState?.piece_abilities||{white:{},black:{}};
       const ply = (gameRow.move_count || 0) + 1;
       const { error: commitError } = await admin.rpc("commit_party_move", {
         p_party_id: partyId, p_game_id: party.game_id, p_user_id: user.id,
