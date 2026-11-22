@@ -505,6 +505,11 @@ body.in-game #game-app .player-info-stack .clock{min-width:66px;margin-left:auto
   position:relative!important;z-index:2!important;overflow:visible!important;
  }
  body.in-game #game-app .player-info-stack .playerbar{visibility:visible!important;min-height:48px!important}
+ body.in-game #game-app .board-wrap{
+  grid-column:2!important;grid-row:1!important;align-self:center!important;justify-self:center!important;
+  width:min(100%,calc(100dvh - 180px))!important;max-height:calc(100dvh - 180px)!important;
+  aspect-ratio:1!important;overflow:visible!important;
+ }
  body.in-game #game-app .replay-toolbar{
   grid-column:2!important;grid-row:2!important;align-self:start!important;justify-self:stretch!important;
   width:min(100%,760px)!important;max-width:760px!important;margin:0 auto!important;
