@@ -722,12 +722,12 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
  
  document.getElementById('god-toggle').onclick=()=>{
   if(document.getElementById('game-mode').value==='online'&&(!partyData||partyData.party?.host_user_id!==user?.id)){setStatus('Somente o anfitrião pode ativar o CHEAT.','check');return;}
-  godMode=!godMode;selected=null;legal=[];illegal=[];
+  godMode=!godMode;godCreateActive=godMode;godToolAction='replace';selected=null;legal=[];illegal=[];
   const b=document.getElementById('god-toggle');b.classList.toggle('active',godMode);
-  b.textContent=godMode?'⚡ CHEAT: ATIVADO':'✦ MODO DEUS: DESATIVADO';
-  document.getElementById('god-hint').textContent=godMode?'Clique em qualquer casa para invocar a peça escolhida. A peça existente será substituída.':'Ative o CHEAT e clique em qualquer casa para colocar a peça escolhida. A peça que já estiver na casa será substituída.';
-  if(godMode){started=true;document.body.classList.add('playing');setStatus('CHEAT ativado. Escolha cor e peça e clique em uma casa do tabuleiro.');}
-  else setStatus('CHEAT desativado. As regras normais de xadrez voltaram.');
+  b.textContent=godMode?'✚ CRIAR PEÇA: ATIVO':'✚ CRIAR PEÇA';
+  document.getElementById('god-hint').textContent=godMode?'Modo criar peça ativo: clique nas casas para inserir a peça escolhida. Clique novamente para encerrar.':'Escolha cor e peça e pressione CRIAR PEÇA para começar.';
+  if(godMode){started=true;document.body.classList.add('playing');setStatus('Criar peça ativado. Clique nas casas desejadas; cada clique cria a peça selecionada.');}
+  else setStatus('Criação de peças desativada.');
   render();
  };
  document.getElementById('custom-btn').onclick=()=>setStatus('Desafio personalizado: use o CHEAT para montar posições e cenários personalizados.');
