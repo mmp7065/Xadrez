@@ -333,7 +333,8 @@ Deno.serve(async (req) => {
         p_color: color, p_clock_remaining_seconds: Math.max(0, Number(body.clockRemainingSeconds) || 0),
       });
       if (commitError) throw new Error(commitError.message.includes("POSITION_OUTDATED") ? "A posição mudou. Sincronizando a partida…" : commitError.message);
-      const {error:visualError}=await admin.from("chess_party_cheat_state").upsert({party_id:partyId,game_id:party.game_id,piece_abilities:abilities,visual_positions:visualAfter,created_by:user.id,updated_by:user.id,updated_at:new Date().toISOString()},{onConflict:"party_id"});\n      if(visualError)throw visualError;
+      const {error:visualError}=await admin.from("chess_party_cheat_state").upsert({party_id:partyId,game_id:party.game_id,piece_abilities:abilities,visual_positions:visualAfter,created_by:user.id,updated_by:user.id,updated_at:new Date().toISOString()},{onConflict:"party_id"});
+      if(visualError)throw visualError;
       if (chess.isGameOver()) {
         let resultCode = "draw", termination = "draw";
         if (chess.isCheckmate()) { resultCode = color === "white" ? "white_win" : "black_win"; termination = "checkmate"; }
